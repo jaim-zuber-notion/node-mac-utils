@@ -12,7 +12,7 @@
     return self;
 }
 
-+ (NSArray<NSString *> *)getActiveAudioProcesses:(NSError **)error {
++ (NSArray<NSString *> *)getRunningInputAudioProcesses:(NSError **)error {
     AudioObjectPropertyAddress address = {
         kAudioHardwarePropertyProcessObjectList,
         kAudioObjectPropertyScopeGlobal,

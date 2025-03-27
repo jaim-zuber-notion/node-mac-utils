@@ -8,7 +8,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) NSArray<NSString *> *runningBundleIDs;
 
 - (instancetype)init;
-+ (NSArray<NSString *> *)getActiveAudioProcesses:(NSError **)error;
++ (NSArray<NSString *> *)getRunningInputAudioProcesses:(NSError **)error;
 
 @end
 

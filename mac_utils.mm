@@ -16,10 +16,10 @@ void MakeKeyAndOrderFront(const Napi::CallbackInfo &info) {
 }
 
 // Gets a list of processes that are accessing input (microphone)
-Napi::Value GetActiveAudioProcesses(const Napi::CallbackInfo& info) {
+Napi::Value GetRunningInputAudioProcesses(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   NSError *error = nil;
-  NSArray *processes = [AudioProcessMonitor getActiveAudioProcesses:&error];
+  NSArray *processes = [AudioProcessMonitor getRunningInputAudioProcesses:&error];
   if (error) {
     Napi::Error::New(env, [error.localizedDescription UTF8String]).ThrowAsJavaScriptException();
     return env.Null();
@@ -38,8 +38,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "makeKeyAndOrderFront"),
               Napi::Function::New(env, MakeKeyAndOrderFront));
 
-  exports.Set(Napi::String::New(env, "getActiveAudioProcesses"),
-              Napi::Function::New(env, GetActiveAudioProcesses));
+  exports.Set(Napi::String::New(env, "getRunningInputAudioProcesses"),
+              Napi::Function::New(env, GetRunningInputAudioProcesses));
 
   return exports;
 }
