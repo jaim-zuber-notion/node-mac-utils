@@ -24,7 +24,6 @@ Napi::Value GetActiveAudioProcesses(const Napi::CallbackInfo& info) {
     Napi::Error::New(env, [error.localizedDescription UTF8String]).ThrowAsJavaScriptException();
     return env.Null();
   }
-  NSArray *processes = [AudioProcessMonitor getActiveAudioProcesses];
 
   Napi::Array result = Napi::Array::New(env);
   for (NSUInteger i = 0; i < [processes count]; i++) {
