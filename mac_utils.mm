@@ -15,7 +15,7 @@ void MakeKeyAndOrderFront(const Napi::CallbackInfo &info) {
   [[contentView window] makeKeyAndOrderFront:nil];
 }
 
-// Gets a list of processes that are currently playing audio
+// Gets a list of processes that are accessing input (microphone)
 Napi::Value GetActiveAudioProcesses(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     NSArray *processes = [AudioProcessMonitor getActiveAudioProcesses];
