@@ -5,7 +5,8 @@
     "conditions": [
       ['OS=="mac"', {
         "sources": [
-          "mac_utils.mm"
+          "mac_utils.mm",
+          "AudioProcessMonitor.m"
         ],
       }]
     ],
