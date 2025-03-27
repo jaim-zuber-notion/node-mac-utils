@@ -98,7 +98,7 @@
                                           &bundleIDRef);
         
         if (status == noErr && bundleIDRef) {
-            NSString *bundleID = (__bridge_transfer NSString *)bundleIDRef;
+            NSString *bundleID = (NSString *)bundleIDRef;
             if (bundleID.length > 0) {
                 [activeBundleIDs addObject:bundleID];
             }
