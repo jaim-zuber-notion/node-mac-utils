@@ -5,8 +5,8 @@
     "conditions": [
       ['OS=="mac"', {
         "sources": [
-          "mac_utils.mm",
-          "AudioProcessMonitor.m"
+          "macOS/mac_utils.mm",
+          "macOS/AudioProcessMonitor.m"
         ],
       }]
     ],
@@ -30,7 +30,7 @@
     "conditions": [
       ['OS=="win"', {
         "sources": [
-          "win_utils.cpp",
+          "windows/win_utils.cpp",
           "windows/AudioProcessMonitor.cpp"
         ]
       }]
