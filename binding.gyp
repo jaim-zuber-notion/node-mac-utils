@@ -6,8 +6,12 @@
       ['OS=="mac"', {
         "sources": [
           "macOS/mac_utils.mm",
-          "macOS/AudioProcessMonitor.m"
+          "macOS/AudioProcessMonitor.m",
+          "macOS/MicrophoneUsageMonitor.m",
         ],
+        "xcode_settings": {
+          "OTHER_CFLAGS": ["-fobjc-arc"]
+        }
       }]
     ],
     'include_dirs': [
@@ -22,7 +26,12 @@
       "MACOSX_DEPLOYMENT_TARGET": "10.13",
       "SYSTEM_VERSION_COMPAT": 1,
       "OTHER_CPLUSPLUSFLAGS": ["-std=c++14", "-stdlib=libc++"],
-      "OTHER_LDFLAGS": ["-framework CoreFoundation -framework AppKit"]
+      "OTHER_LDFLAGS": [
+        "-framework CoreFoundation",
+        "-framework AppKit",
+        "-framework AudioToolbox",
+        "-framework AVFoundation"
+      ]
     }
   }, {
     "target_name": "win_utils",

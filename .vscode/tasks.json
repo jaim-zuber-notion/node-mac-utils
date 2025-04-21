@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "node-gyp rebuild",
+        "type": "shell",
+        "command": "npx",
+        "args": ["node-gyp", "rebuild"],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "run test-mic-monitor.js",
+        "type": "shell",
+        "command": "node",
+        "args": ["test-mic-monitor.js"],
+        "group": "test",
+        "dependsOn": ["node-gyp rebuild"],
+        "problemMatcher": []
+      }
+    ]
+  }
