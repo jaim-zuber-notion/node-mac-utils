@@ -9,7 +9,7 @@
 		"clean": "node-gyp clean",
 		"lint": "clang-format --dry-run --Werror mac_utils.mm && prettier --check index.js",
 		"format": "clang-format -i mac_utils.mm && prettier --write index.js",
-		"test": "node test-mic-monitor.js",
+		"test": "node test-mic-monitor.js"
 	},
 	"author": "Abhay Buch <buch.abhay@gmail.com>",
 	"dependencies": {
