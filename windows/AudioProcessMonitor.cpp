@@ -120,7 +120,10 @@ std::vector<std::string> GetAudioInputProcesses() {
             DWORD processID = 0;
             pSessionControl2->GetProcessId(&processID);
 
-            if (processID != 0) {
+            AudioSessionState state;
+            pSessionControl2->GetState(&state);
+
+            if (processID != 0 && state == AudioSessionStateActive) {
                 std::string processPath = GetProcessExecutablePath(processID);
                 
                 // Only insert if not already seen
