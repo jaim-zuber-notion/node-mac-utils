@@ -1,5 +1,3 @@
-const MicrophoneStatusEmitter = require('./MicrophoneStatusEmitter');
-
 let platform_utils;
 
 if (process.platform === 'darwin') {
@@ -19,10 +17,5 @@ module.exports = {
     makeKeyAndOrderFront: platform_utils.makeKeyAndOrderFront,
     startMonitoringMic: platform_utils.startMonitoringMic,
     stopMonitoringMic: platform_utils.stopMonitoringMic,
-    MicrophoneStatusEmitter: class extends MicrophoneStatusEmitter {
-      constructor() {
-        super(platform_utils);
-      }
-    },
   } : {})
 };

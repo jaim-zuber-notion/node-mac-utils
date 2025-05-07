@@ -7,7 +7,24 @@
  * 3. Get a list of processes using the microphone
  */
 
-const { startMonitoringMic, stopMonitoringMic, getRunningInputAudioProcesses, MicrophoneStatusEmitter } = require('./index');
+const { startMonitoringMic, stopMonitoringMic, getRunningInputAudioProcesses } = require('./index');
+const EventEmitter = require('events');
+
+class MicrophoneStatusEmitter extends EventEmitter {
+  start() {
+    startMonitoringMic((microphoneActive, error) => {
+      if (error) {
+        this.emit('info', error.message);
+      } else {
+        this.emit('status', microphoneActive);
+      }
+    });
+  }
+
+  stop() {
+    stopMonitoringMic();
+  }
+}
 
 // Function to display microphone processes
 async function displayMicProcesses() {
@@ -71,9 +88,8 @@ console.log('Starting microphone monitoring...');
 console.log('Press Ctrl+C to stop.\n');
 
 displayMicProcesses();
-// startMicMonitor();
+
 startMicrophoneStatusEmitter();
+
 // Keep the process running
 process.stdin.resume();
-
-
