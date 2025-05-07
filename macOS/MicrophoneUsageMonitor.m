@@ -35,10 +35,10 @@ static AudioObjectPropertyAddress defaultInputDeviceAddress = (AudioObjectProper
 - (void)restartMonitoring {
   [self cleanup];
 
-  self.storedCompletion(NO, [self makeErrorWithCode:0 message: @"Waiting to restart monitoring"]);
+  self.storedCompletion(NO, [self makeInfoErrorWithMessage: @"Waiting to restart monitoring..."]);
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
                  dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-       self.storedCompletion(NO, [self makeErrorWithCode:0 message: @"✅ Restarting monitoring"]);
+       self.storedCompletion(NO, [self makeInfoErrorWithMessage: @"✅ Restarting monitoring"]);
        [self startMonitoringInternal:self.storedCompletion];
    });
   }
@@ -164,7 +164,7 @@ static AudioObjectPropertyAddress defaultInputDeviceAddress = (AudioObjectProper
     }
 
     if (isAlive == 0) {
-      NSError *error = [self makeErrorWithCode:aliveStatus message:@"Device is not alive - running status will not be valid"];
+      NSError *error = [self makeInfoErrorWithMessage: @"Device is not alive - running status will not be valid"];
       completion(NO, error);
       return;
     }
@@ -180,7 +180,7 @@ static AudioObjectPropertyAddress defaultInputDeviceAddress = (AudioObjectProper
     if (runningStatus == noErr) {
       completion((BOOL)isRunning, nil);
     } else {
-      completion(NO, [self makeErrorWithCode:runningStatus message:@"Error in AudioObjectGetPropertyData - may be transient"]);
+      completion(NO, [self makeInfoErrorWithMessage:@"Error in AudioObjectGetPropertyData - may be transient"]);
     }
   };
 }
@@ -188,7 +188,7 @@ static AudioObjectPropertyAddress defaultInputDeviceAddress = (AudioObjectProper
 - (void)cleanup {
   if (self.callback) {
     NSString *message = [NSString stringWithFormat:@"Removing AudioObjectRemovePropertyListenerBlock for micDeviceID: %u", self.micDeviceID];
-    self.storedCompletion(NO, [self makeErrorWithCode:0 message: message]);
+    self.storedCompletion(NO, [self makeInfoErrorWithMessage: message]);
     AudioObjectRemovePropertyListenerBlock(self.micDeviceID,
                                          &micPropertyAddress,
                                          dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
@@ -205,10 +205,16 @@ static AudioObjectPropertyAddress defaultInputDeviceAddress = (AudioObjectProper
   [self stopMonitoring];
 }
 
-- (NSError*)makeErrorWithCode:(OSStatus)code message:(NSString*)message {
-  return [NSError errorWithDomain:errorDomain
-                             code:code
-                         userInfo:@{NSLocalizedDescriptionKey: message}];
-}
+  - (NSError*)makeErrorWithCode:(OSStatus)code message:(NSString*)message {
+    return [NSError errorWithDomain:errorDomain
+                              code:code
+                          userInfo:@{NSLocalizedDescriptionKey: message}];
+  }
+
+  - (NSError*)makeInfoErrorWithMessage:(NSString*)message {
+    return [NSError errorWithDomain:errorDomain
+                              code:INFO_ERROR_CODE
+                          userInfo:@{NSLocalizedDescriptionKey: message}];
+  }
 
 @end

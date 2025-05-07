@@ -106,6 +106,8 @@ Napi::Value StartMonitoringMic(const Napi::CallbackInfo& info) {
           } else {
             err = Napi::Error::New(env, "Unknown error occurred");
           }
+          err.Set("code", Napi::Number::New(env, cbData->error.code));
+          err.Set("domain", Napi::String::New(env, [cbData->error.domain UTF8String]));
 
           js_callback.Call({ Napi::Boolean::New(env, cbData->micActive), err.Value() });
         } else {
