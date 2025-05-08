@@ -11,9 +11,13 @@ if (process.platform === 'darwin') {
 module.exports = {
   // Common exports that work on all platforms
   getRunningInputAudioProcesses: platform_utils.getRunningInputAudioProcesses,
+  INFO_ERROR_CODE: 1,
+  ERROR_DOMAIN: "com.MicrophoneUsageMonitor",
   
   // Mac-specific exports
   ...(process.platform === 'darwin' ? {
-    makeKeyAndOrderFront: platform_utils.makeKeyAndOrderFront
+    makeKeyAndOrderFront: platform_utils.makeKeyAndOrderFront,
+    startMonitoringMic: platform_utils.startMonitoringMic,
+    stopMonitoringMic: platform_utils.stopMonitoringMic,
   } : {})
 };
