@@ -7,8 +7,20 @@
  * 3. Get a list of processes using the microphone
  */
 
-const { startMonitoringMic, stopMonitoringMic, getRunningInputAudioProcesses, INFO_ERROR_CODE, ERROR_DOMAIN } = require('./index');
+const { getRunningInputAudioProcesses, INFO_ERROR_CODE, ERROR_DOMAIN } = require('./index');
 const EventEmitter = require('events');
+
+// Only import mic monitoring functions on Darwin (macOS) systems
+const { startMonitoringMic, stopMonitoringMic } = process.platform === 'darwin'
+  ? require('./index')
+  : {
+      startMonitoringMic: () => {
+        throw new Error('Microphone monitoring is only supported on macOS');
+      },
+      stopMonitoringMic: () => {
+        // No-op for non-Darwin systems
+      }
+    };
 
 class MicrophoneStatusEmitter extends EventEmitter {
   start() {
@@ -93,7 +105,10 @@ console.log('Press Ctrl+C to stop.\n');
 
 displayMicProcesses();
 
-startMicrophoneStatusEmitter();
+if (process.platform === 'darwin') {
+  startMicrophoneStatusEmitter();
+  // Keep the process running
+  process.stdin.resume();
+}
 
-// Keep the process running
-process.stdin.resume();
+
