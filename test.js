@@ -19,7 +19,7 @@ async function runTests() {
             console.log('\nTesting Windows-specific functions:');
             // Add any Windows-specific function tests here
         } else {
-            console.log('Unsupported platform');
+            console.log('node-mac-utils Unsupported platform:', process.platform);
         }
 
         // Log all available exports

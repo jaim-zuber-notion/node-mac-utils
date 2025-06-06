@@ -1,11 +1,18 @@
 let platform_utils;
 
+const noopPlatformUtils = {
+  getRunningInputAudioProcesses: () => {
+    return ['', ''];
+  }
+};
+
 if (process.platform === 'darwin') {
   platform_utils = require("bindings")("mac_utils.node");
 } else if (process.platform === 'win32') {
   platform_utils = require("bindings")("win_utils.node");
 } else {
-  throw new Error('Unsupported platform');
+  console.log('node-mac-utils Unsupported platform:', process.platform);
+  platform_utils = noopPlatformUtils;
 }
 
 module.exports = {
