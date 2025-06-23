@@ -119,7 +119,7 @@ Napi::Value StartMonitoringMic(const Napi::CallbackInfo& info) {
       };
 
       // Create and pass the data to BlockingCall
-      CallbackData* data = new CallbackData{microphoneActive, error};
+      CallbackData* data = new CallbackData{static_cast<bool>(microphoneActive), error};
 
       ts_fn.BlockingCall(data, callback);
     }];
