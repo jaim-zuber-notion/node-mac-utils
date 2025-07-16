@@ -7,14 +7,23 @@ Napi::Value GetRunningInputAudioProcesses(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   try {
-    std::vector<std::string> processes = GetAudioInputProcesses();
+    AudioProcessResult result = GetAudioInputProcesses();
 
-    Napi::Array result = Napi::Array::New(env);
-    for (size_t i = 0; i < processes.size(); i++) {
-      result.Set(i, Napi::String::New(env, processes[i]));
+    if (!result.success) {
+      // Create a detailed error object
+      Napi::Error error = Napi::Error::New(env, result.errorMessage);
+      error.Set("code", Napi::Number::New(env, result.errorCode));
+      error.Set("domain", Napi::String::New(env, "AudioProcessMonitor"));
+      error.ThrowAsJavaScriptException();
+      return env.Null();
     }
 
-    return result;
+    Napi::Array resultArray = Napi::Array::New(env);
+    for (size_t i = 0; i < result.processes.size(); i++) {
+      resultArray.Set(i, Napi::String::New(env, result.processes[i]));
+    }
+
+    return resultArray;
   } catch (const std::exception& e) {
     Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
     return env.Null();

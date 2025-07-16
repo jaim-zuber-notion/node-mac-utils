@@ -40,13 +40,16 @@ static std::string GetProcessExecutablePath(DWORD processID) {
     return "Unknown";
 }
 
-std::vector<std::string> GetAudioInputProcesses() {
-    std::vector<std::string> results;
+AudioProcessResult GetAudioInputProcesses() {
+    AudioProcessResult result;
     std::unordered_set<std::string> seen;  // Track unique strings
     HRESULT hr = CoInitialize(nullptr);
 
     if (FAILED(hr)) {
-        return results;
+        result.errorCode = hr;
+        result.errorMessage = "Failed to initialize COM";
+        result.success = false;
+        return result;
     }
 
     IMMDeviceEnumerator* pEnumerator = nullptr;
@@ -56,17 +59,25 @@ std::vector<std::string> GetAudioInputProcesses() {
 
     hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) {
-        return results;
+        result.errorCode = hr;
+        result.errorMessage = "Failed to create device enumerator";
+        result.success = false;
+        CoUninitialize();
+        return result;
     }
 
     // Get default capture (microphone) device
     hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
     if (FAILED(hr)) {
+        result.errorCode = hr;
+        result.errorMessage = "Failed to get default audio endpoint";
+        result.success = false;
         pEnumerator->Release();
-        return results;
+        CoUninitialize();
+        return result;
     }
 
-    bool isActive = false;
+    bool isPeakValueActive = false;
     IAudioMeterInformation* pMeter = nullptr;
 
     // Get the Audio Meter Interface
@@ -74,36 +85,52 @@ std::vector<std::string> GetAudioInputProcesses() {
     if (SUCCEEDED(hr)) {
         float peakValue = 0.0f;
         pMeter->GetPeakValue(&peakValue);
-        isActive = (peakValue > 0.0f);
+        isPeakValueActive = (peakValue > 0.0f);
         pMeter->Release();
     }
 
-    if (!isActive) {
+    bool isPaddingActive = false;
+    IAudioClient* pAudioClient = nullptr;
+    hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&pAudioClient);
+    if (SUCCEEDED(hr)) {
+        UINT32 padding = 0;
+        hr = pAudioClient->GetCurrentPadding(&padding);
+        isPaddingActive = SUCCEEDED(hr) && padding > 0;
+        pAudioClient->Release();
+    }
+
+    if (!isPeakValueActive && !isPaddingActive) {
         pDevice->Release();
         pEnumerator->Release();
         CoUninitialize();
-        return results;
+        // This is not an error - just no active audio
+        result.processes = std::vector<std::string>();
+        return result;
     }
 
     // Get session manager
     hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
     if (FAILED(hr)) {
-        std::cerr << "Failed to activate IAudioSessionManager2. HRESULT: " << std::hex << hr << std::endl;
+        result.errorCode = hr;
+        result.errorMessage = "Failed to activate IAudioSessionManager2";
+        result.success = false;
         pDevice->Release();
         pEnumerator->Release();
         CoUninitialize();
-        return results;
+        return result;
     }
 
     // Get audio session enumerator
     hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
     if (FAILED(hr)) {
-        std::cerr << "Failed to get IAudioSessionEnumerator. HRESULT: " << std::hex << hr << std::endl;
+        result.errorCode = hr;
+        result.errorMessage = "Failed to get IAudioSessionEnumerator";
+        result.success = false;
         pSessionManager->Release();
         pDevice->Release();
         pEnumerator->Release();
         CoUninitialize();
-        return results;
+        return result;
     }
 
     int sessionCount = 0;
@@ -128,7 +155,7 @@ std::vector<std::string> GetAudioInputProcesses() {
                 
                 // Only insert if not already seen
                 if (seen.insert(processPath).second) {
-                    results.push_back(processPath);
+                    result.processes.push_back(processPath);
                 }
             }
             pSessionControl2->Release();
@@ -143,5 +170,5 @@ std::vector<std::string> GetAudioInputProcesses() {
     pEnumerator->Release();
     CoUninitialize();
 
-    return results;
+    return result;
 }
