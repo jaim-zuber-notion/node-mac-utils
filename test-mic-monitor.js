@@ -46,18 +46,30 @@ class MicrophoneStatusEmitter extends EventEmitter {
 async function displayMicProcesses() {
   try {
     console.log('\n--- Current Microphone Processes ---');
-    const processes = await getRunningInputAudioProcesses();
+    const result = getRunningInputAudioProcesses();
 
-    if (processes.length === 0) {
-      console.log('No processes are currently using the microphone');
+    if (result.success) {
+      if (result.processes.length === 0) {
+        console.log('No processes are currently using the microphone');
+      } else {
+        console.log('Processes using the microphone:');
+        result.processes.forEach((process, index) => {
+          console.log(`${index + 1}. ${process}`);
+        });
+      }
     } else {
-      console.log('Processes using the microphone:');
-      processes.forEach((process, index) => {
-        console.log(`${index + 1}. ${process}`);
-      });
+      console.error('Error getting microphone processes:', result.error);
+      console.error('Error code:', result.code);
+      console.error('Error domain:', result.domain);
     }
   } catch (error) {
     console.error('Error getting microphone processes:', error.message);
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+    if (error.domain) {
+      console.error('Error domain:', error.domain);
+    }
   }
 }
 
@@ -72,6 +84,10 @@ function startMicrophoneStatusEmitter() {
     console.log('⚠️ Microphone Info:', info);
   });
 
+  emitter.on('error', (error) => {
+    console.error('❌ Microphone Error:', error);
+  });
+
   emitter.start();
 }
 
@@ -83,6 +99,12 @@ function startMicMonitor() {
       if (error) {
         console.error('Node - error');
         console.error('Error starting microphone monitor:', error.message);
+        if (error.code) {
+          console.error('Error code:', error.code);
+        }
+        if (error.domain) {
+          console.error('Error domain:', error.domain);
+        }
       } else {
         console.log(`Node: [${timestamp}] Microphone active:`, microphoneActive);
       }
@@ -90,6 +112,12 @@ function startMicMonitor() {
   } catch (error) {
     console.error('Node - error');
     console.error('Error starting microphone monitor:', error.message);
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+    if (error.domain) {
+      console.error('Error domain:', error.domain);
+    }
   }
 }
 

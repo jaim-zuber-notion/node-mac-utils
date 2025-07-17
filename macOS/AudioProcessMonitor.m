@@ -12,7 +12,9 @@
   return self;
 }
 
-+ (NSArray<NSString *> *)getRunningInputAudioProcesses:(NSError **)error {
++ (struct AudioProcessResult)getRunningInputAudioProcesses {
+  struct AudioProcessResult result = {nil, nil, true};
+  
   AudioObjectPropertyAddress address = {
       kAudioHardwarePropertyProcessObjectList,
       kAudioObjectPropertyScopeGlobal,
@@ -27,24 +29,24 @@
                                                  &dataSize);
 
   if (status != noErr) {
-      if (error) {
-          *error = [NSError errorWithDomain:@"AudioProcessMonitor"
-                                     code:status
-                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to get process list size"}];
-      }
-      return @[];
+      result.error = [NSError errorWithDomain:@"AudioProcessMonitor"
+                                       code:status
+                                   userInfo:@{NSLocalizedDescriptionKey: @"Failed to get process list size"}];
+      result.success = false;
+      result.processes = @[];
+      return result;
   }
 
   NSInteger count = dataSize / sizeof(AudioObjectID);
   AudioObjectID *processIDs = malloc(dataSize);
 
   if (!processIDs) {
-    if (error) {
-        *error = [NSError errorWithDomain:@"AudioProcessMonitor"
-                                   code:-1
-                               userInfo:@{NSLocalizedDescriptionKey: @"Failed to allocate memory"}];
-    }
-    return @[];
+    result.error = [NSError errorWithDomain:@"AudioProcessMonitor"
+                                     code:-1
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to allocate memory"}];
+    result.success = false;
+    result.processes = @[];
+    return result;
   }
 
   status = AudioObjectGetPropertyData(kAudioObjectSystemObject,
@@ -56,12 +58,12 @@
 
   if (status != noErr) {
     free(processIDs);
-    if (error) {
-        *error = [NSError errorWithDomain:@"AudioProcessMonitor"
-                                   code:status
-                               userInfo:@{NSLocalizedDescriptionKey: @"Failed to get process list"}];
-    }
-    return @[];
+    result.error = [NSError errorWithDomain:@"AudioProcessMonitor"
+                                     code:status
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to get process list"}];
+    result.success = false;
+    result.processes = @[];
+    return result;
   }
 
   NSMutableArray<NSString *> *activeBundleIDs = [NSMutableArray array];
@@ -106,7 +108,9 @@
   }
 
   free(processIDs);
-  return [activeBundleIDs copy];
+  result.processes = [activeBundleIDs copy];
+  result.success = true;
+  return result;
 }
 
 @end 

@@ -22,20 +22,34 @@ void MakeKeyAndOrderFront(const Napi::CallbackInfo &info) {
 // Gets a list of processes that are accessing input (microphone)
 Napi::Value GetRunningInputAudioProcesses(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  NSError *error = nil;
-  NSArray *processes = [AudioProcessMonitor getRunningInputAudioProcesses:&error];
-  if (error) {
-    Napi::Error::New(env, [error.localizedDescription UTF8String]).ThrowAsJavaScriptException();
-    return env.Null();
+  
+  struct AudioProcessResult result = [AudioProcessMonitor getRunningInputAudioProcesses];
+  
+  // Create a JavaScript object to represent the AudioProcessResult
+  Napi::Object resultObj = Napi::Object::New(env);
+  
+  if (!result.success) {
+    // Set error information
+    resultObj.Set("success", Napi::Boolean::New(env, false));
+    resultObj.Set("error", Napi::String::New(env, [result.error.localizedDescription UTF8String]));
+    resultObj.Set("code", Napi::Number::New(env, result.error.code));
+    resultObj.Set("domain", Napi::String::New(env, [result.error.domain UTF8String]));
+    resultObj.Set("processes", Napi::Array::New(env));
+  } else {
+    // Set success information
+    resultObj.Set("success", Napi::Boolean::New(env, true));
+    resultObj.Set("error", env.Null());
+    
+    // Convert processes array
+    Napi::Array processesArray = Napi::Array::New(env);
+    for (NSUInteger i = 0; i < [result.processes count]; i++) {
+        NSString *process = [result.processes objectAtIndex:i];
+        processesArray.Set(i, Napi::String::New(env, [process UTF8String]));
+    }
+    resultObj.Set("processes", processesArray);
   }
 
-  Napi::Array result = Napi::Array::New(env);
-  for (NSUInteger i = 0; i < [processes count]; i++) {
-      NSString *process = [processes objectAtIndex:i];
-      result.Set(i, Napi::String::New(env, [process UTF8String]));
-  }
-
-  return result;
+  return resultObj;
 }
 
 // Start monitoring microphone usage
