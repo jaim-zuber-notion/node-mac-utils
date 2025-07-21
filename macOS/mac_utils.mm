@@ -22,10 +22,10 @@ void MakeKeyAndOrderFront(const Napi::CallbackInfo &info) {
 // Gets a list of processes that are accessing input (microphone) - original interface
 Napi::Value GetRunningInputAudioProcesses(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   NSError *error = nil;
   NSArray<NSString *> *processes = [AudioProcessMonitor getRunningInputAudioProcesses:&error];
-  
+
   Napi::Array result = Napi::Array::New(env);
   for (NSUInteger i = 0; i < [processes count]; i++) {
     NSString *process = [processes objectAtIndex:i];

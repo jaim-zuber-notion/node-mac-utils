@@ -111,7 +111,7 @@
 
 + (struct AudioProcessResult)getProcessesAccessingMicrophoneWithResult {
   struct AudioProcessResult result = {nil, nil, true};
-  
+
   AudioObjectPropertyAddress address = {
       kAudioHardwarePropertyProcessObjectList,
       kAudioObjectPropertyScopeGlobal,
