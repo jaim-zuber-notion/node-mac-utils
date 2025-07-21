@@ -59,10 +59,13 @@ Napi::Value GetProcessesAccessingMicrophoneWithResult(const Napi::CallbackInfo& 
 
 // Initialize the module exports
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  exports.Set(Napi::String::New(env, "getRunningInputAudioProcesses"),
-              Napi::Function::New(env, &GetRunningInputAudioProcesses));
-  exports.Set(Napi::String::New(env, "getProcessesAccessingMicrophoneWithResult"),
-              Napi::Function::New(env, &GetProcessesAccessingMicrophoneWithResult));
+  Napi::Value (*originalAudioProcessesFunc)(const Napi::CallbackInfo&) = GetRunningInputAudioProcesses;
+  Napi::Value (*microphoneAccessFunc)(const Napi::CallbackInfo&) = GetProcessesAccessingMicrophoneWithResult;
+  
+  exports.Set("getRunningInputAudioProcesses",
+              Napi::Function::New(env, originalAudioProcessesFunc));
+  exports.Set("getProcessesAccessingMicrophoneWithResult",
+              Napi::Function::New(env, microphoneAccessFunc));
 
   return exports;
 }
