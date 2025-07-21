@@ -19,15 +19,30 @@ void MakeKeyAndOrderFront(const Napi::CallbackInfo &info) {
   [[contentView window] makeKeyAndOrderFront:nil];
 }
 
-// Gets a list of processes that are accessing input (microphone)
+// Gets a list of processes that are accessing input (microphone) - original interface
 Napi::Value GetRunningInputAudioProcesses(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   
-  struct AudioProcessResult result = [AudioProcessMonitor getRunningInputAudioProcesses];
+  NSError *error = nil;
+  NSArray<NSString *> *processes = [AudioProcessMonitor getRunningInputAudioProcesses:&error];
   
+  Napi::Array result = Napi::Array::New(env);
+  for (NSUInteger i = 0; i < [processes count]; i++) {
+    NSString *process = [processes objectAtIndex:i];
+    result.Set(i, Napi::String::New(env, [process UTF8String]));
+  }
+
+  return result;
+}
+
+// Gets processes accessing microphone with structured result
+Napi::Value GetProcessesAccessingMicrophoneWithResult(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  struct AudioProcessResult result = [AudioProcessMonitor getProcessesAccessingMicrophoneWithResult];
+
   // Create a JavaScript object to represent the AudioProcessResult
   Napi::Object resultObj = Napi::Object::New(env);
-  
   if (!result.success) {
     // Set error information
     resultObj.Set("success", Napi::Boolean::New(env, false));
@@ -39,7 +54,7 @@ Napi::Value GetRunningInputAudioProcesses(const Napi::CallbackInfo& info) {
     // Set success information
     resultObj.Set("success", Napi::Boolean::New(env, true));
     resultObj.Set("error", env.Null());
-    
+
     // Convert processes array
     Napi::Array processesArray = Napi::Array::New(env);
     for (NSUInteger i = 0; i < [result.processes count]; i++) {
@@ -167,6 +182,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   exports.Set(Napi::String::New(env, "getRunningInputAudioProcesses"),
               Napi::Function::New(env, GetRunningInputAudioProcesses));
+
+  exports.Set(Napi::String::New(env, "getProcessesAccessingMicrophoneWithResult"),
+              Napi::Function::New(env, GetProcessesAccessingMicrophoneWithResult));
 
   exports.Set(Napi::String::New(env, "startMonitoringMic"),
               Napi::Function::New(env, StartMonitoringMic));

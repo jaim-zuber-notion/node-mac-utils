@@ -3,6 +3,13 @@ let platform_utils;
 const noopPlatformUtils = {
   getRunningInputAudioProcesses: () => {
     return ['', ''];
+  },
+  getProcessesAccessingMicrophoneWithResult: () => {
+    return {
+      success: true,
+      error: null,
+      processes: ['', '']
+    };
   }
 };
 
@@ -18,6 +25,7 @@ if (process.platform === 'darwin') {
 module.exports = {
   // Common exports that work on all platforms
   getRunningInputAudioProcesses: platform_utils.getRunningInputAudioProcesses,
+  getProcessesAccessingMicrophoneWithResult: platform_utils.getProcessesAccessingMicrophoneWithResult,
   INFO_ERROR_CODE: 1,
   ERROR_DOMAIN: "com.MicrophoneUsageMonitor",
   

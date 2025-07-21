@@ -11,4 +11,8 @@ struct AudioProcessResult {
     AudioProcessResult() : errorCode(S_OK), success(true) {}
 };
 
-AudioProcessResult GetAudioInputProcesses();
+// Original function returning vector (restored)
+std::vector<std::string> GetAudioInputProcesses();
+
+// New function with structured result
+AudioProcessResult GetProcessesAccessingMicrophoneWithResult();

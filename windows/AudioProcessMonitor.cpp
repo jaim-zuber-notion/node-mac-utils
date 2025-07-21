@@ -40,7 +40,8 @@ static std::string GetProcessExecutablePath(DWORD processID) {
     return "Unknown";
 }
 
-AudioProcessResult GetAudioInputProcesses() {
+// New function with structured result
+AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
     AudioProcessResult result;
     std::unordered_set<std::string> seen;  // Track unique strings
     HRESULT hr = CoInitialize(nullptr);
@@ -171,4 +172,10 @@ AudioProcessResult GetAudioInputProcesses() {
     CoUninitialize();
 
     return result;
+}
+
+// Original function returning vector (restored for backward compatibility)
+std::vector<std::string> GetAudioInputProcesses() {
+    AudioProcessResult result = GetProcessesAccessingMicrophoneWithResult();
+    return result.processes;
 }

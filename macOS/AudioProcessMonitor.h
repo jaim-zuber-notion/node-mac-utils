@@ -14,8 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) NSArray<NSString *> *runningBundleIDs;
 
 - (instancetype)init;
-+ (struct AudioProcessResult)getRunningInputAudioProcesses;
++ (NSArray<NSString *> *)getRunningInputAudioProcesses:(NSError **)error;
++ (struct AudioProcessResult)getProcessesAccessingMicrophoneWithResult;
 
 @end
 
-NS_ASSUME_NONNULL_END 
+NS_ASSUME_NONNULL_END
