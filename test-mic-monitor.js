@@ -46,21 +46,15 @@ class MicrophoneStatusEmitter extends EventEmitter {
 async function displayMicProcesses() {
   try {
     console.log('\n--- Current Microphone Processes ---');
-    const result = getRunningInputAudioProcesses();
+    const processes = getRunningInputAudioProcesses(); // Returns simple array
 
-    if (result.success) {
-      if (result.processes.length === 0) {
-        console.log('No processes are currently using the microphone');
-      } else {
-        console.log('Processes using the microphone:');
-        result.processes.forEach((process, index) => {
-          console.log(`${index + 1}. ${process}`);
-        });
-      }
+    if (processes.length === 0) {
+      console.log('No processes are currently using the microphone');
     } else {
-      console.error('Error getting microphone processes:', result.error);
-      console.error('Error code:', result.code);
-      console.error('Error domain:', result.domain);
+      console.log('Processes using the microphone:');
+      processes.forEach((process, index) => {
+        console.log(`${index + 1}. ${process}`);
+      });
     }
   } catch (error) {
     console.error('Error getting microphone processes:', error.message);
