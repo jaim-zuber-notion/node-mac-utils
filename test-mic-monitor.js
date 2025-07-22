@@ -46,7 +46,7 @@ class MicrophoneStatusEmitter extends EventEmitter {
 async function displayMicProcesses() {
   try {
     console.log('\n--- Current Microphone Processes ---');
-    const processes = await getRunningInputAudioProcesses();
+    const processes = getRunningInputAudioProcesses(); // Returns simple array
 
     if (processes.length === 0) {
       console.log('No processes are currently using the microphone');
@@ -58,6 +58,12 @@ async function displayMicProcesses() {
     }
   } catch (error) {
     console.error('Error getting microphone processes:', error.message);
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+    if (error.domain) {
+      console.error('Error domain:', error.domain);
+    }
   }
 }
 
@@ -72,6 +78,10 @@ function startMicrophoneStatusEmitter() {
     console.log('⚠️ Microphone Info:', info);
   });
 
+  emitter.on('error', (error) => {
+    console.error('❌ Microphone Error:', error);
+  });
+
   emitter.start();
 }
 
@@ -83,6 +93,12 @@ function startMicMonitor() {
       if (error) {
         console.error('Node - error');
         console.error('Error starting microphone monitor:', error.message);
+        if (error.code) {
+          console.error('Error code:', error.code);
+        }
+        if (error.domain) {
+          console.error('Error domain:', error.domain);
+        }
       } else {
         console.log(`Node: [${timestamp}] Microphone active:`, microphoneActive);
       }
@@ -90,6 +106,12 @@ function startMicMonitor() {
   } catch (error) {
     console.error('Node - error');
     console.error('Error starting microphone monitor:', error.message);
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+    if (error.domain) {
+      console.error('Error domain:', error.domain);
+    }
   }
 }
 

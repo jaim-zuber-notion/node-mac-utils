@@ -1,6 +1,12 @@
 #import <Foundation/Foundation.h>
 #import <AudioToolbox/AudioToolbox.h>
 
+struct AudioProcessResult {
+    NSArray<NSString*>* _Nullable processes;
+    NSError* _Nullable error;
+    bool success;
+};
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface AudioProcessMonitor : NSObject
@@ -9,7 +15,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)init;
 + (NSArray<NSString *> *)getRunningInputAudioProcesses:(NSError **)error;
++ (struct AudioProcessResult)getProcessesAccessingMicrophoneWithResult;
 
 @end
 
-NS_ASSUME_NONNULL_END 
+NS_ASSUME_NONNULL_END
