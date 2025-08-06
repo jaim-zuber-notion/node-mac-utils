@@ -139,11 +139,15 @@ This hardening addresses the common issue where Bluetooth headsets would intermi
    - **Suggested Fix**: Apply same volume/mute filters as other devices but with relaxed thresholds
    - **Alternative**: Add debouncing/state caching to handle session flapping common with Bluetooth
 
-3. **Missing State Management**: No debouncing for Bluetooth session state changes
-   - Bluetooth sessions frequently flap between idle/active due to wireless protocol behavior
-   - **Suggested Fix**: Implement time-based state caching or require sustained activity periods
+~~3. **Missing State Management**: No debouncing for Bluetooth session state changes~~
+   - ✅ **Fixed**: Implemented comprehensive state management and debouncing system:
+     - **Power Management Holdoff**: 5-second activity hold after last detection
+     - **Rapid Change Detection**: Automatically extends debouncing for flapping devices
+     - **Asymmetric Thresholds**: Faster activation (2 checks), slower deactivation (4 checks)
+     - **Extended Debouncing**: 8-second debounce for devices with >5 changes in 10 seconds
+     - **Separate State Tracking**: Independent tracking of detected vs. reported states
 
 ### Recommended Improvements
 - ✅ **Enhanced Bluetooth Detection**: Replaced keyword-based detection with property key validation
+- ✅ **State Debouncing**: Implemented advanced temporal filtering with power management awareness
 - **Graduated Permissiveness**: Apply standard volume/mute checks to Bluetooth devices with lower thresholds
-- **State Debouncing**: Add temporal filtering for rapid state changes specific to wireless devices

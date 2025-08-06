@@ -32,18 +32,40 @@
 
 #pragma comment(lib, "Ole32.lib")
 
-// State caching for Bluetooth device debouncing
+// Enhanced state caching for Bluetooth device debouncing and power management
 struct BluetoothDeviceState {
     bool lastActiveState;
+    bool lastReportedState;  // What we last reported to the caller
     std::chrono::steady_clock::time_point lastStateChange;
+    std::chrono::steady_clock::time_point lastActivityTime;  // Last time any activity was detected
+    std::chrono::steady_clock::time_point lastReportTime;    // Last time we reported a state
     int consecutiveActiveChecks;
+    int consecutiveInactiveChecks;
+    int rapidStateChangeCount;  // Track rapid flapping
+    std::chrono::steady_clock::time_point rapidStateChangeWindow;
 
-    BluetoothDeviceState() : lastActiveState(false), lastStateChange(std::chrono::steady_clock::now()), consecutiveActiveChecks(0) {}
+    BluetoothDeviceState() :
+        lastActiveState(false),
+        lastReportedState(false),
+        lastStateChange(std::chrono::steady_clock::now()),
+        lastActivityTime(std::chrono::steady_clock::now()),
+        lastReportTime(std::chrono::steady_clock::now()),
+        consecutiveActiveChecks(0),
+        consecutiveInactiveChecks(0),
+        rapidStateChangeCount(0),
+        rapidStateChangeWindow(std::chrono::steady_clock::now()) {}
 };
 
 static std::unordered_map<std::wstring, BluetoothDeviceState> bluetoothStateCache;
-static const int BLUETOOTH_DEBOUNCE_MS = 2000; // 2 second debounce
-static const int REQUIRED_CONSECUTIVE_CHECKS = 3;
+
+// Enhanced debouncing constants for power management scenarios
+static const int BLUETOOTH_DEBOUNCE_MS = 3000; // Increased to 3 seconds for power management
+static const int BLUETOOTH_ACTIVE_HOLD_MS = 5000; // Hold active state for 5 seconds after last activity
+static const int REQUIRED_CONSECUTIVE_ACTIVE_CHECKS = 2; // Reduced for faster response
+static const int REQUIRED_CONSECUTIVE_INACTIVE_CHECKS = 4; // More checks needed to go inactive
+static const int RAPID_CHANGE_WINDOW_MS = 10000; // 10 second window for flapping detection
+static const int MAX_RAPID_CHANGES = 5; // Max state changes in window before extending debounce
+static const int EXTENDED_DEBOUNCE_MS = 8000; // Extended debounce for flapping devices
 
 // Function to get process executable path from PID
 static std::string GetProcessExecutablePath(DWORD processID) {
@@ -61,8 +83,7 @@ static std::string GetProcessExecutablePath(DWORD processID) {
         WideCharToMultiByte(CP_UTF8, 0, path, -1, &result[0], strSize, nullptr, nullptr);
         if (!result.empty() && result.back() == 0) {
             result.pop_back();
-        }
-        return result;
+        }return result;
     }
 
     CloseHandle(hProcess);
@@ -117,10 +138,8 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
                     hardwareId.find(L"BTH\\") != std::wstring::npos) {
                     isBluetooth = true;
                     break;
-                }
-            }
-        }
-        PropVariantClear(&varHardwareIds);
+                }}
+        }PropVariantClear(&varHardwareIds);
     }
 
     // Method 3: Check container ID against Bluetooth service class (when available)
@@ -132,8 +151,7 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
             // If we have a container ID, we could potentially check if it's associated 
             // with a Bluetooth service, but this requires additional APIs
             // For now, this is a placeholder for future enhancement
-        }
-        PropVariantClear(&varContainerId);
+        }PropVariantClear(&varContainerId);
     }
 
     // Method 4: Check parent device ID for Bluetooth radio patterns
@@ -146,8 +164,7 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
             std::transform(parentId.begin(), parentId.end(), parentId.begin(), ::towupper);
             isBluetooth = (parentId.find(L"BLUETOOTH") != std::wstring::npos ||
                           parentId.find(L"BTHENUM") != std::wstring::npos);
-        }
-        PropVariantClear(&varParent);
+        }PropVariantClear(&varParent);
     }
 
     // Method 5: Check device class GUID for Bluetooth audio classes
@@ -164,8 +181,7 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
             // {4d36e96c-e325-11ce-bfc1-08002be10318} - Sound, video and game controllers (may include BT audio)
             if (classGuid.find(L"E0CBF06C-CD8B-4647-BB8A-263B43F0F974") != std::wstring::npos) {
                 isBluetooth = true;
-            }
-        }
+            }}
         PropVariantClear(&varClassGuid);
     }
 
@@ -181,8 +197,7 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
             // Bluetooth bus type GUID: {2bd67d8b-8beb-48d5-87e0-6cda3428040a}
             if (busType.find(L"2BD67D8B-8BEB-48D5-87E0-6CDA3428040A") != std::wstring::npos) {
                 isBluetooth = true;
-            }
-        }
+            }}
         PropVariantClear(&varBusType);
     }
 
@@ -194,8 +209,7 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
         if (FAILED(hr)) {
             // Try device description if friendly name isn't available
             hr = pProps->GetValue(PKEY_Device_DeviceDesc, &varFriendlyName);
-        }
-        if (SUCCEEDED(hr) && varFriendlyName.vt == VT_LPWSTR) {
+        }if (SUCCEEDED(hr) && varFriendlyName.vt == VT_LPWSTR) {
             std::wstring deviceName = varFriendlyName.pwszVal;
             std::transform(deviceName.begin(), deviceName.end(), deviceName.begin(), ::towupper);
             // More comprehensive pattern matching for Bluetooth indicators
@@ -210,8 +224,7 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
                           deviceName.find(L"BT ") != std::wstring::npos ||
                           (deviceName.find(L"WIRELESS") != std::wstring::npos &&
                            deviceName.find(L"AUDIO") != std::wstring::npos));
-        }
-        PropVariantClear(&varFriendlyName);
+        }PropVariantClear(&varFriendlyName);
     }
 
     pProps->Release();
@@ -280,21 +293,17 @@ static bool CheckSessionsForActivity(IMMDevice* pDevice, bool isBluetooth = fals
                 // Accept sessions that are active and have some volume (even very low) and not muted
                 if (state == AudioSessionStateActive && sessionVolume > 0.001f && !isMuted) {
                     hasActiveSessions = true;
-                }
-                // Also accept sessions that are active even with zero volume if not muted
+                }// Also accept sessions that are active even with zero volume if not muted
                 // (some Bluetooth drivers report zero volume initially)
                 else if (state == AudioSessionStateActive && !isMuted) {
                     hasActiveSessions = true;
-                }
-            } else {
+                }} else {
                 // Standard logic for non-Bluetooth devices
                 if (state == AudioSessionStateActive && sessionVolume > 0.0f && !isMuted) {
                     hasActiveSessions = true;
-                }
-            }
+                }}
             pVolume->Release();
-        }
-        pSessionControl->Release();
+        }pSessionControl->Release();
 
         if (hasActiveSessions) break;
     }
@@ -338,40 +347,85 @@ static bool HasActiveAudio(IMMDevice* pDevice) {
         hasActiveAudio = CheckSessionsForActivity(pDevice, isBluetooth);
     }
 
-    // Method 4: Bluetooth-specific debouncing and state management
+    // Method 4: Enhanced Bluetooth-specific debouncing and power management
     if (isBluetooth && !deviceId.empty()) {
         auto& state = bluetoothStateCache[deviceId];
         auto now = std::chrono::steady_clock::now();
         auto timeSinceLastChange = std::chrono::duration_cast<std::chrono::milliseconds>(now - state.lastStateChange).count();
+        auto timeSinceLastActivity = std::chrono::duration_cast<std::chrono::milliseconds>(now - state.lastActivityTime).count();
+        auto timeSinceRapidWindow = std::chrono::duration_cast<std::chrono::milliseconds>(now - state.rapidStateChangeWindow).count();
+
+        // Reset rapid change counter if outside window
+        if (timeSinceRapidWindow > RAPID_CHANGE_WINDOW_MS) {
+            state.rapidStateChangeCount = 0;
+            state.rapidStateChangeWindow = now;
+        }
+
+        // Update activity timestamp if any activity detected
+        if (hasActiveAudio) {
+            state.lastActivityTime = now;
+        }
+
+        // Determine current effective debounce time (extended if device is flapping)
+        int effectiveDebounceMs = (state.rapidStateChangeCount >= MAX_RAPID_CHANGES) ?
+                                 EXTENDED_DEBOUNCE_MS : BLUETOOTH_DEBOUNCE_MS;
 
         if (hasActiveAudio != state.lastActiveState) {
-            // State change detected
+            // State change detected - increment rapid change counter
+            state.rapidStateChangeCount++;
             if (hasActiveAudio) {
+                // Going from inactive to active
                 state.consecutiveActiveChecks++;
-                // Require multiple consecutive active checks before considering it truly active
-                if (state.consecutiveActiveChecks >= REQUIRED_CONSECUTIVE_CHECKS) {
+                state.consecutiveInactiveChecks = 0;
+                // Require fewer consecutive checks for faster response to genuine activity
+                if (state.consecutiveActiveChecks >= REQUIRED_CONSECUTIVE_ACTIVE_CHECKS) {
                     state.lastActiveState = true;
+                    state.lastReportedState = true;
                     state.lastStateChange = now;
+                    state.lastReportTime = now;
                     return true;
-                }
-                return false; // Still in probation period
+                }// Still building confidence - return last reported state during probation
+                return state.lastReportedState;
             } else {
-                // Going from active to inactive - apply debouncing
-                if (timeSinceLastChange < BLUETOOTH_DEBOUNCE_MS) {
-                    return state.lastActiveState; // Stay in previous state during debounce period
-                }
-                state.lastActiveState = false;
+                // Going from active to inactive
+                state.consecutiveInactiveChecks++;
                 state.consecutiveActiveChecks = 0;
-                state.lastStateChange = now;
-                return false;
-            }
-        } else {
-            // State consistent - reset consecutive checks if inactive
-            if (!hasActiveAudio) {
-                state.consecutiveActiveChecks = 0;
-            }
-            return state.lastActiveState;
-        }
+                // Apply power management holdoff - stay active if recent activity
+                if (timeSinceLastActivity < BLUETOOTH_ACTIVE_HOLD_MS) {
+                    return true; // Keep reporting active due to recent activity
+                }    // Apply debouncing with flapping detection
+                if (timeSinceLastChange < effectiveDebounceMs) {
+                    return state.lastReportedState; // Stay in previous reported state during debounce
+                }    // Require more consecutive inactive checks to confirm device is truly idle
+                if (state.consecutiveInactiveChecks >= REQUIRED_CONSECUTIVE_INACTIVE_CHECKS) {
+                    state.lastActiveState = false;
+                    state.lastReportedState = false;
+                    state.lastStateChange = now;
+                    state.lastReportTime = now;
+                    return false;
+                }    // Still building confidence for inactive state
+                return state.lastReportedState;
+            }} else {
+            // State consistent with previous check
+            if (hasActiveAudio) {
+                // Consistently active - reset inactive counter
+                state.consecutiveInactiveChecks = 0;
+                state.consecutiveActiveChecks = std::min(state.consecutiveActiveChecks + 1, REQUIRED_CONSECUTIVE_ACTIVE_CHECKS + 1);
+                
+                // Ensure we report active if consistently seeing activity
+                if (state.consecutiveActiveChecks >= REQUIRED_CONSECUTIVE_ACTIVE_CHECKS && !state.lastReportedState) {
+                    state.lastReportedState = true;
+                    state.lastReportTime = now;
+                }return state.lastReportedState;
+            } else {
+                // Consistently inactive - but check power management holdoff
+                if (timeSinceLastActivity < BLUETOOTH_ACTIVE_HOLD_MS) {
+                    return true; // Keep active due to recent activity
+                }    state.consecutiveActiveChecks = 0;
+                state.consecutiveInactiveChecks = std::min(state.consecutiveInactiveChecks + 1, REQUIRED_CONSECUTIVE_INACTIVE_CHECKS + 1);
+                
+                return state.lastReportedState;
+            }}
     }
 
     return hasActiveAudio;
@@ -453,17 +507,11 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
                                 // Only insert if not already seen
                                 if (seen.insert(processPath).second) {
                                     result.processes.push_back(processPath);
-                                }
-                            }
-                            pSessionControl2->Release();
-                        }
-                        pSessionControl->Release();
-                    }
-                    pSessionEnum->Release();
-                }
-                pSessionManager->Release();
-            }
-        }
+                                }            }                pSessionControl2->Release();
+                        }        pSessionControl->Release();
+                    }    pSessionEnum->Release();
+                }pSessionManager->Release();
+            }}
 
         pDevice->Release();
     }
@@ -553,11 +601,9 @@ std::vector<std::string> GetAudioInputProcesses() {
                         // Only insert if not already seen
                         if (seen.insert(processPath).second) {
                             results.push_back(processPath);
-                        }
-                    }
+                        }    }
                     pSessionControl2->Release();
-                }
-                pSessionControl->Release();
+                }pSessionControl->Release();
             }
 
             // Cleanup for this device
