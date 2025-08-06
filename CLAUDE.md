@@ -109,15 +109,30 @@ The current branch includes significant improvements for Bluetooth headset detec
 
 This hardening addresses the common issue where Bluetooth headsets would intermittently fail to report active audio sessions due to inconsistent driver behavior and wireless protocol timing.
 
+## Code Quality Guidelines
+
+### Whitespace and Formatting
+- **No Trailing Whitespace**: Empty lines must contain no spaces or tabs
+- **Consistent Indentation**: Use spaces consistently (follow existing file patterns)
+- **Clean Line Endings**: Ensure proper line termination without trailing characters
+- **Run Linting**: Always run `npm run lint` and `npm run format` before committing changes
+
+### C++ Specific Guidelines
+- Use consistent brace placement and indentation
+- Avoid whitespace on empty lines between code blocks
+- Maintain clean separation between logical code sections
+
 ## Known Limitations & Improvement Opportunities
 
-### Current Bluetooth Detection Issues
-1. **Weak Heuristic**: Current `IsBluetoothDevice()` only checks for "Bluetooth" or "Wireless" keywords in device names
-   - Unreliable due to inconsistent manufacturer naming (e.g., "AirPods Pro Hands-Free AG Audio" may not match)
-   - **Suggested Fix**: Use more reliable Windows property keys:
-     - `PKEY_Device_Bluetooth_DeviceAddress` - Direct Bluetooth MAC address detection  
-     - `PKEY_AudioEndpoint_FormFactor` - Form factor indication
-     - `PKEY_DeviceInterface_FriendlyName` - Enhanced device name properties
+### Current Bluetooth Detection Issues - ✅ RESOLVED
+~~1. **Weak Heuristic**: Current `IsBluetoothDevice()` only checks for "Bluetooth" or "Wireless" keywords in device names~~
+   - ✅ **Fixed**: Implemented robust 7-tier detection system using Windows property keys:
+     - `PKEY_Device_InstanceId` - Hardware-level Bluetooth enumeration patterns
+     - `PKEY_Device_HardwareIds` - Vendor-specific Bluetooth identifiers  
+     - `PKEY_Device_ClassGuid` - Bluetooth device class validation
+     - `PKEY_Device_BusTypeGuid` - Bus type verification
+     - `PKEY_DeviceInterface_FriendlyName` - Enhanced name pattern matching
+     - Hardware detection takes precedence over name-based fallbacks
 
 2. **Overly Permissive Logic**: Bluetooth devices use `HasAnySessions()` fallback which can cause false positives
    - Currently: "If Bluetooth && has any sessions → consider active"
@@ -129,6 +144,6 @@ This hardening addresses the common issue where Bluetooth headsets would intermi
    - **Suggested Fix**: Implement time-based state caching or require sustained activity periods
 
 ### Recommended Improvements
-- **Enhanced Bluetooth Detection**: Replace keyword-based detection with property key validation
+- ✅ **Enhanced Bluetooth Detection**: Replaced keyword-based detection with property key validation
 - **Graduated Permissiveness**: Apply standard volume/mute checks to Bluetooth devices with lower thresholds
 - **State Debouncing**: Add temporal filtering for rapid state changes specific to wireless devices

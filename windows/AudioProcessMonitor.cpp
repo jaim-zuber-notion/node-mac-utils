@@ -24,6 +24,8 @@
 #include <unordered_set>
 #include <chrono>
 #include <unordered_map>
+#include <algorithm>
+#include <cctype>
 
 // Project includes
 #include "AudioProcessMonitor.h"
@@ -78,7 +80,7 @@ static std::wstring GetDeviceId(IMMDevice* pDevice) {
     return id;
 }
 
-// Enhanced function to check if device is Bluetooth using multiple property keys
+// Enhanced function to check if device is Bluetooth using reliable Windows property keys
 static bool IsBluetoothDevice(IMMDevice* pDevice) {
     IPropertyStore* pProps = nullptr;
     HRESULT hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
@@ -86,59 +88,130 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
 
     bool isBluetooth = false;
 
-    // Method 1: Check for Bluetooth device address (most reliable)
-    PROPVARIANT varBluetoothAddr;
-    PropVariantInit(&varBluetoothAddr);
-
-    // Try PKEY_Device_Bluetooth_DeviceAddress (this might not be available in all contexts)
-    PROPERTYKEY bluetoothAddrKey = { { 0x2BD67D8B, 0x8BEB, 0x48D5, { 0x87, 0xE0, 0x6C, 0xDA, 0x34, 0x28, 0x04, 0x0A } }, 1 };
-    hr = pProps->GetValue(bluetoothAddrKey, &varBluetoothAddr);
-    if (SUCCEEDED(hr) && (varBluetoothAddr.vt == VT_LPWSTR || varBluetoothAddr.vt == VT_BSTR)) {
-        isBluetooth = true;
+    // Method 1: Check device instance ID for Bluetooth hardware patterns (most reliable)
+    PROPVARIANT varInstanceId;
+    PropVariantInit(&varInstanceId);
+    hr = pProps->GetValue(PKEY_Device_InstanceId, &varInstanceId);
+    if (SUCCEEDED(hr) && varInstanceId.vt == VT_LPWSTR) {
+        std::wstring instanceId = varInstanceId.pwszVal;
+        // Convert to uppercase for case-insensitive matching
+        std::transform(instanceId.begin(), instanceId.end(), instanceId.begin(), ::towupper);
+        // Bluetooth devices have specific patterns in their instance IDs
+        isBluetooth = (instanceId.find(L"BTHENUM") != std::wstring::npos ||
+                      instanceId.find(L"BTH\\") != std::wstring::npos ||
+                      instanceId.find(L"BLUETOOTH") != std::wstring::npos);
     }
-    PropVariantClear(&varBluetoothAddr);
+    PropVariantClear(&varInstanceId);
 
-    // Method 2: Check device instance ID for Bluetooth patterns
+    // Method 2: Check device hardware IDs for Bluetooth vendor patterns
     if (!isBluetooth) {
-        PROPVARIANT varInstanceId;
-        PropVariantInit(&varInstanceId);
-        hr = pProps->GetValue(PKEY_Device_InstanceId, &varInstanceId);
-        if (SUCCEEDED(hr) && varInstanceId.vt == VT_LPWSTR) {
-            std::wstring instanceId = varInstanceId.pwszVal;
-            // Bluetooth devices often have BTHENUM in their instance ID
-            isBluetooth = (instanceId.find(L"BTHENUM") != std::wstring::npos ||
-                          instanceId.find(L"BTH\\") != std::wstring::npos);
+        PROPVARIANT varHardwareIds;
+        PropVariantInit(&varHardwareIds);
+        hr = pProps->GetValue(PKEY_Device_HardwareIds, &varHardwareIds);
+        if (SUCCEEDED(hr) && varHardwareIds.vt == (VT_VECTOR | VT_LPWSTR)) {
+            for (ULONG i = 0; i < varHardwareIds.calpwstr.cElems; i++) {
+                std::wstring hardwareId = varHardwareIds.calpwstr.pElems[i];
+                std::transform(hardwareId.begin(), hardwareId.end(), hardwareId.begin(), ::towupper);
+                if (hardwareId.find(L"BLUETOOTH") != std::wstring::npos ||
+                    hardwareId.find(L"BTHENUM") != std::wstring::npos ||
+                    hardwareId.find(L"BTH\\") != std::wstring::npos) {
+                    isBluetooth = true;
+                    break;
+                }
+            }
         }
-        PropVariantClear(&varInstanceId);
+        PropVariantClear(&varHardwareIds);
     }
 
-    // Method 3: Check device friendly name for Bluetooth indicators (fallback)
+    // Method 3: Check container ID against Bluetooth service class (when available)
+    if (!isBluetooth) {
+        PROPVARIANT varContainerId;
+        PropVariantInit(&varContainerId);
+        hr = pProps->GetValue(PKEY_Device_ContainerId, &varContainerId);
+        if (SUCCEEDED(hr) && varContainerId.vt == VT_CLSID) {
+            // If we have a container ID, we could potentially check if it's associated 
+            // with a Bluetooth service, but this requires additional APIs
+            // For now, this is a placeholder for future enhancement
+        }
+        PropVariantClear(&varContainerId);
+    }
+
+    // Method 4: Check parent device ID for Bluetooth radio patterns
+    if (!isBluetooth) {
+        PROPVARIANT varParent;
+        PropVariantInit(&varParent);
+        hr = pProps->GetValue(PKEY_Device_Parent, &varParent);
+        if (SUCCEEDED(hr) && varParent.vt == VT_LPWSTR) {
+            std::wstring parentId = varParent.pwszVal;
+            std::transform(parentId.begin(), parentId.end(), parentId.begin(), ::towupper);
+            isBluetooth = (parentId.find(L"BLUETOOTH") != std::wstring::npos ||
+                          parentId.find(L"BTHENUM") != std::wstring::npos);
+        }
+        PropVariantClear(&varParent);
+    }
+
+    // Method 5: Check device class GUID for Bluetooth audio classes
+    if (!isBluetooth) {
+        PROPVARIANT varClassGuid;
+        PropVariantInit(&varClassGuid);
+        hr = pProps->GetValue(PKEY_Device_ClassGuid, &varClassGuid);
+        if (SUCCEEDED(hr) && varClassGuid.vt == VT_LPWSTR) {
+            std::wstring classGuid = varClassGuid.pwszVal;
+            std::transform(classGuid.begin(), classGuid.end(), classGuid.begin(), ::towupper);
+            
+            // Check for Bluetooth-specific device class GUIDs
+            // {e0cbf06c-cd8b-4647-bb8a-263b43f0f974} - Bluetooth devices
+            // {4d36e96c-e325-11ce-bfc1-08002be10318} - Sound, video and game controllers (may include BT audio)
+            if (classGuid.find(L"E0CBF06C-CD8B-4647-BB8A-263B43F0F974") != std::wstring::npos) {
+                isBluetooth = true;
+            }
+        }
+        PropVariantClear(&varClassGuid);
+    }
+
+    // Method 6: Check bus type reported by the device
+    if (!isBluetooth) {
+        PROPVARIANT varBusType;
+        PropVariantInit(&varBusType);
+        hr = pProps->GetValue(PKEY_Device_BusTypeGuid, &varBusType);
+        if (SUCCEEDED(hr) && varBusType.vt == VT_LPWSTR) {
+            std::wstring busType = varBusType.pwszVal;
+            std::transform(busType.begin(), busType.end(), busType.begin(), ::towupper);
+            
+            // Bluetooth bus type GUID: {2bd67d8b-8beb-48d5-87e0-6cda3428040a}
+            if (busType.find(L"2BD67D8B-8BEB-48D5-87E0-6CDA3428040A") != std::wstring::npos) {
+                isBluetooth = true;
+            }
+        }
+        PropVariantClear(&varBusType);
+    }
+
+    // Method 7: Fallback to device friendly name patterns (least reliable, but catches edge cases)
     if (!isBluetooth) {
         PROPVARIANT varFriendlyName;
         PropVariantInit(&varFriendlyName);
         hr = pProps->GetValue(PKEY_DeviceInterface_FriendlyName, &varFriendlyName);
+        if (FAILED(hr)) {
+            // Try device description if friendly name isn't available
+            hr = pProps->GetValue(PKEY_Device_DeviceDesc, &varFriendlyName);
+        }
         if (SUCCEEDED(hr) && varFriendlyName.vt == VT_LPWSTR) {
-            std::wstring friendlyName = varFriendlyName.pwszVal;
-            isBluetooth = (friendlyName.find(L"Bluetooth") != std::wstring::npos ||
-                          friendlyName.find(L"Wireless") != std::wstring::npos ||
-                          friendlyName.find(L"BT ") != std::wstring::npos ||
-                          friendlyName.find(L"Hands-Free") != std::wstring::npos ||
-                          friendlyName.find(L"A2DP") != std::wstring::npos);
+            std::wstring deviceName = varFriendlyName.pwszVal;
+            std::transform(deviceName.begin(), deviceName.end(), deviceName.begin(), ::towupper);
+            // More comprehensive pattern matching for Bluetooth indicators
+            isBluetooth = (deviceName.find(L"BLUETOOTH") != std::wstring::npos ||
+                          deviceName.find(L"HANDS-FREE") != std::wstring::npos ||
+                          deviceName.find(L"A2DP") != std::wstring::npos ||
+                          deviceName.find(L"HFP") != std::wstring::npos ||
+                          deviceName.find(L"HSP") != std::wstring::npos ||
+                          deviceName.find(L"AVRCP") != std::wstring::npos ||
+                          deviceName.find(L"AIRPODS") != std::wstring::npos ||
+                          deviceName.find(L"WIRELESS HEADSET") != std::wstring::npos ||
+                          deviceName.find(L"BT ") != std::wstring::npos ||
+                          (deviceName.find(L"WIRELESS") != std::wstring::npos &&
+                           deviceName.find(L"AUDIO") != std::wstring::npos));
         }
         PropVariantClear(&varFriendlyName);
-    }
-
-    // Method 4: Check device description as final fallback
-    if (!isBluetooth) {
-        PROPVARIANT varDeviceDesc;
-        PropVariantInit(&varDeviceDesc);
-        hr = pProps->GetValue(PKEY_Device_DeviceDesc, &varDeviceDesc);
-        if (SUCCEEDED(hr) && varDeviceDesc.vt == VT_LPWSTR) {
-            std::wstring deviceName = varDeviceDesc.pwszVal;
-            isBluetooth = (deviceName.find(L"Bluetooth") != std::wstring::npos ||
-                          deviceName.find(L"Wireless") != std::wstring::npos);
-        }
-        PropVariantClear(&varDeviceDesc);
     }
 
     pProps->Release();
