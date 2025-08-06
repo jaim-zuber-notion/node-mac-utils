@@ -1,12 +1,28 @@
-  #include <iostream>
+// AudioProcessMonitor.cpp
+  //
+
+  // Include windows.h FIRST, before any other Windows headers
+  #ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+  #endif
+  #include <windows.h>
+
+  // Now include other Windows headers
   #include <psapi.h>
+  #include <audiopolicy.h>
+  #include <endpointvolume.h>
+  #include <mmdeviceapi.h>
+  #include <Audioclient.h>
+  #include <functiondiscoverykeys_devpkey.h>
+
+  // Standard library includes
+  #include <iostream>
   #include <string>
   #include <vector>
-  #include "AudioProcessMonitor.h"
-  #include <Audioclient.h>
   #include <unordered_set>
-  #include <mmreg.h>
-  #include <functiondiscoverykeys_devpkey.h>
+
+  // Project includes
+  #include "AudioProcessMonitor.h"
 
   #pragma comment(lib, "Ole32.lib")
 
