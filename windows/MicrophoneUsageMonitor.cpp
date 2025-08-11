@@ -33,7 +33,7 @@ static std::string GetProcessName(DWORD processId) {
 }
 
 MicrophoneUsageMonitor::MicrophoneUsageMonitor() 
-    : m_refCount(1), m_deviceEnumerator(nullptr), m_isMonitoring(false) {
+    : m_refCount(1), m_deviceEnumerator(nullptr), m_isMonitoring(false), m_lastReportedState(false) {
     CoInitialize(nullptr);
 }
 
@@ -57,8 +57,7 @@ bool MicrophoneUsageMonitor::StartMonitoring(MicUsageCallback callback) {
     m_isMonitoring = true;
     
     // Trigger initial check
-    std::vector<ProcessInfo> processes = GetActiveProcesses();
-    m_callback(!processes.empty(), processes);
+    CheckAndReportStateChange();
     
     return true;
 }
@@ -196,6 +195,19 @@ std::vector<ProcessInfo> MicrophoneUsageMonitor::GetActiveProcesses() {
     return processes;
 }
 
+void MicrophoneUsageMonitor::CheckAndReportStateChange() {
+    if (!m_callback) return;
+    
+    std::vector<ProcessInfo> processes = GetActiveProcesses();
+    bool currentState = !processes.empty();
+    
+    // Only report if state actually changed
+    if (currentState != m_lastReportedState) {
+        m_lastReportedState = currentState;
+        m_callback(currentState, processes);
+    }
+}
+
 // IUnknown implementation
 STDMETHODIMP MicrophoneUsageMonitor::QueryInterface(REFIID riid, void** ppv) {
     if (riid == IID_IUnknown || riid == __uuidof(IAudioSessionNotification)) {
@@ -229,9 +241,8 @@ STDMETHODIMP MicrophoneUsageMonitor::OnSessionCreated(IAudioSessionControl* pNew
     // Register for events on the new session
     pNewSession->RegisterAudioSessionNotification(this);
     
-    // Trigger callback with updated process list
-    std::vector<ProcessInfo> processes = GetActiveProcesses();
-    m_callback(!processes.empty(), processes);
+    // Check and report state change only if state actually changed
+    CheckAndReportStateChange();
     
     return S_OK;
 }
@@ -240,9 +251,8 @@ STDMETHODIMP MicrophoneUsageMonitor::OnSessionCreated(IAudioSessionControl* pNew
 STDMETHODIMP MicrophoneUsageMonitor::OnStateChanged(AudioSessionState NewState) {
     if (!m_callback) return S_OK;
     
-    // Trigger callback when any session changes state
-    std::vector<ProcessInfo> processes = GetActiveProcesses();
-    m_callback(!processes.empty(), processes);
+    // Check and report state change only if overall microphone state changed
+    CheckAndReportStateChange();
     
     return S_OK;
 }
@@ -250,9 +260,8 @@ STDMETHODIMP MicrophoneUsageMonitor::OnStateChanged(AudioSessionState NewState) 
 STDMETHODIMP MicrophoneUsageMonitor::OnSessionDisconnected(AudioSessionDisconnectReason DisconnectReason) {
     if (!m_callback) return S_OK;
     
-    // Session disconnected - update process list
-    std::vector<ProcessInfo> processes = GetActiveProcesses();
-    m_callback(!processes.empty(), processes);
+    // Check and report state change only if overall microphone state changed
+    CheckAndReportStateChange();
     
     return S_OK;
 }

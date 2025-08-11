@@ -27,10 +27,12 @@ private:
     IMMDeviceEnumerator* m_deviceEnumerator;
     std::vector<IAudioSessionManager2*> m_sessionManagers;
     bool m_isMonitoring;
+    bool m_lastReportedState;
     
     void InitializeSessionMonitoring();
     void CleanupSessionMonitoring();
     std::vector<ProcessInfo> GetActiveProcesses();
+    void CheckAndReportStateChange();
 
 public:
     MicrophoneUsageMonitor();
