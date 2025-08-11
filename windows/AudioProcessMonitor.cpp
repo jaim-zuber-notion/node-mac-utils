@@ -5,6 +5,7 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#define NOMINMAX  // Prevent Windows from defining min/max macros
 #include <windows.h>
 
 // Now include other Windows headers
@@ -31,6 +32,9 @@
 #include "AudioProcessMonitor.h"
 
 #pragma comment(lib, "Ole32.lib")
+
+// Forward declaration
+class AudioSessionMonitor;
 
 // Enhanced state caching for Bluetooth device debouncing and power management
 struct BluetoothDeviceState {
@@ -620,4 +624,268 @@ std::vector<std::string> GetAudioInputProcesses() {
     CoUninitialize();
 
     return results;
+}
+
+// Event-driven session monitoring implementation
+class AudioSessionMonitor : public IAudioSessionNotification, public IAudioSessionEvents {
+private:
+    LONG m_refCount;
+    SessionStateCallback m_callback;
+    EnhancedSessionCallback m_enhancedCallback;
+    std::vector<IAudioSessionManager2*> m_sessionManagers;
+    std::unordered_map<std::string, bool> m_sessionStates; // Track session states by device+process
+    std::unordered_map<DWORD, std::string> m_processCache; // Cache process names by PID
+    IMMDeviceEnumerator* m_deviceEnumerator;
+    bool m_initialized;
+
+    // Helper to generate unique session key
+    std::string GetSessionKey(IMMDevice* device, DWORD processId) {
+        LPWSTR deviceId = nullptr;
+        device->GetId(&deviceId);
+        std::wstring wDeviceId(deviceId ? deviceId : L"unknown");
+        CoTaskMemFree(deviceId);
+        
+        std::string sessionKey;
+        sessionKey.resize(wDeviceId.size());
+        WideCharToMultiByte(CP_UTF8, 0, wDeviceId.c_str(), -1, &sessionKey[0], sessionKey.size(), nullptr, nullptr);
+        sessionKey += "_" + std::to_string(processId);
+        return sessionKey;
+    }
+
+    // Helper to get device name
+    std::string GetDeviceName(IMMDevice* pDevice) {
+        if (!pDevice) return "Unknown Device";
+        
+        IPropertyStore* pProps = nullptr;
+        HRESULT hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
+        if (FAILED(hr)) return "Unknown Device";
+        
+        PROPVARIANT varName;
+        PropVariantInit(&varName);
+        hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
+        
+        std::string deviceName = "Unknown Device";
+        if (SUCCEEDED(hr) && varName.vt == VT_LPWSTR) {
+            std::wstring wDeviceName(varName.pwszVal);
+            deviceName.resize(wDeviceName.size());
+            WideCharToMultiByte(CP_UTF8, 0, wDeviceName.c_str(), -1, &deviceName[0], deviceName.size(), nullptr, nullptr);
+        }
+        
+        PropVariantClear(&varName);
+        pProps->Release();
+        return deviceName;
+    }
+
+public:
+    AudioSessionMonitor(SessionStateCallback callback) 
+        : m_refCount(1), m_callback(callback), m_enhancedCallback(nullptr), m_deviceEnumerator(nullptr), m_initialized(false) {
+        CoInitialize(nullptr);
+        Initialize();
+    }
+
+    AudioSessionMonitor(EnhancedSessionCallback enhancedCallback) 
+        : m_refCount(1), m_callback(nullptr), m_enhancedCallback(enhancedCallback), m_deviceEnumerator(nullptr), m_initialized(false) {
+        CoInitialize(nullptr);
+        Initialize();
+    }
+
+    ~AudioSessionMonitor() {
+        Cleanup();
+        CoUninitialize();
+    }
+
+    // IUnknown implementation
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) {
+        if (riid == IID_IUnknown || riid == __uuidof(IAudioSessionNotification)) {
+            *ppv = static_cast<IAudioSessionNotification*>(this);
+        } else if (riid == __uuidof(IAudioSessionEvents)) {
+            *ppv = static_cast<IAudioSessionEvents*>(this);
+        } else {
+            *ppv = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() {
+        return InterlockedIncrement(&m_refCount);
+    }
+
+    STDMETHODIMP_(ULONG) Release() {
+        LONG ref = InterlockedDecrement(&m_refCount);
+        if (ref == 0) {
+            delete this;
+        }
+        return ref;
+    }
+
+    // IAudioSessionNotification implementation
+    STDMETHODIMP OnSessionCreated(IAudioSessionControl* pNewSession) {
+        if (!pNewSession) return S_OK;
+
+        // Register for session events
+        pNewSession->RegisterAudioSessionNotification(this);
+        
+        // Get session details for immediate processing
+        IAudioSessionControl2* pSessionControl2 = nullptr;
+        HRESULT hr = pNewSession->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pSessionControl2);
+        if (SUCCEEDED(hr)) {
+            DWORD processId = 0;
+            pSessionControl2->GetProcessId(&processId);
+            
+            AudioSessionState state;
+            pSessionControl2->GetState(&state);
+            
+            if (processId != 0 && state == AudioSessionStateActive) {
+                std::string processPath = GetProcessExecutablePath(processId);
+                if (!processPath.empty()) {
+                    std::string filename = processPath.substr(processPath.find_last_of("\\") + 1);
+                    
+                    // Cache the process name for this PID
+                    m_processCache[processId] = filename;
+                    
+                    // Call appropriate callback
+                    if (m_enhancedCallback) {
+                        // Provide detailed process information
+                        ProcessSessionInfo info;
+                        info.processName = filename;
+                        info.fullPath = processPath;
+                        info.processId = processId;
+                        info.isActive = true;
+                        // Note: We don't have device context in session creation event
+                        info.deviceName = "Capture Device";
+                        
+                        m_enhancedCallback(info);
+                    } else if (m_callback) {
+                        // Legacy callback
+                        m_callback(filename, true);
+                    }
+                }
+            }
+            
+            pSessionControl2->Release();
+        }
+        
+        return S_OK;
+    }
+
+    // IAudioSessionEvents implementation  
+    STDMETHODIMP OnStateChanged(AudioSessionState NewState) {
+        // This will be called for any session state change
+        // We can use this for immediate detection of session deactivation
+        
+        if (NewState == AudioSessionStateInactive && m_callback) {
+            // Session became inactive - this is immediate call-end detection
+            // We don't have process info here, so we trigger a general state check
+            m_callback("", false); // Empty string signals state change, not specific process
+        }
+        
+        return S_OK;
+    }
+
+    // Other IAudioSessionEvents methods (required but not used for our purpose)
+    STDMETHODIMP OnDisplayNameChanged(LPCWSTR NewDisplayName, LPCGUID EventContext) { return S_OK; }
+    STDMETHODIMP OnIconPathChanged(LPCWSTR NewIconPath, LPCGUID EventContext) { return S_OK; }
+    STDMETHODIMP OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext) { return S_OK; }
+    STDMETHODIMP OnChannelVolumeChanged(DWORD ChannelCount, float NewChannelVolumes[], DWORD ChannelIndex, LPCGUID EventContext) { return S_OK; }
+    STDMETHODIMP OnGroupingParamChanged(LPCGUID NewGroupingParam, LPCGUID EventContext) { return S_OK; }
+    STDMETHODIMP OnSessionDisconnected(AudioSessionDisconnectReason DisconnectReason) { 
+        // Session explicitly disconnected - immediate call-end signal
+        if (m_callback) {
+            m_callback("", false); // Signal session disconnection
+        }
+        return S_OK; 
+    }
+
+private:
+    void Initialize() {
+        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, 
+                                    __uuidof(IMMDeviceEnumerator), (void**)&m_deviceEnumerator);
+        if (FAILED(hr)) return;
+
+        // Enumerate all capture devices and register for session notifications
+        IMMDeviceCollection* pCollection = nullptr;
+        hr = m_deviceEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
+        if (FAILED(hr)) return;
+
+        UINT deviceCount = 0;
+        pCollection->GetCount(&deviceCount);
+
+        for (UINT i = 0; i < deviceCount; i++) {
+            IMMDevice* pDevice = nullptr;
+            hr = pCollection->Item(i, &pDevice);
+            if (FAILED(hr)) continue;
+
+            IAudioSessionManager2* pSessionManager = nullptr;
+            hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
+            if (SUCCEEDED(hr)) {
+                // Register for new session notifications
+                pSessionManager->RegisterSessionNotification(this);
+                
+                // CRITICAL: Enumerate existing sessions to activate notification system
+                IAudioSessionEnumerator* pSessionEnum = nullptr;
+                hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
+                if (SUCCEEDED(hr)) {
+                    int sessionCount = 0;
+                    pSessionEnum->GetCount(&sessionCount); // This activates notifications!
+                    
+                    // Also register for events on existing sessions
+                    for (int j = 0; j < sessionCount; j++) {
+                        IAudioSessionControl* pSessionControl = nullptr;
+                        hr = pSessionEnum->GetSession(j, &pSessionControl);
+                        if (SUCCEEDED(hr)) {
+                            pSessionControl->RegisterAudioSessionNotification(this);
+                            pSessionControl->Release();
+                        }
+                    }
+                    
+                    pSessionEnum->Release();
+                }
+                
+                m_sessionManagers.push_back(pSessionManager);
+            }
+            
+            pDevice->Release();
+        }
+        
+        pCollection->Release();
+        m_initialized = true;
+    }
+
+    void Cleanup() {
+        if (!m_initialized) return;
+        
+        // Unregister from all session managers
+        for (auto* pSessionManager : m_sessionManagers) {
+            pSessionManager->UnregisterSessionNotification(this);
+            pSessionManager->Release();
+        }
+        m_sessionManagers.clear();
+        
+        if (m_deviceEnumerator) {
+            m_deviceEnumerator->Release();
+            m_deviceEnumerator = nullptr;
+        }
+        
+        m_initialized = false;
+    }
+};
+
+// Implementation of custom deleter
+void AudioSessionMonitorDeleter::operator()(AudioSessionMonitor* monitor) const {
+    delete monitor;
+}
+
+// Factory functions
+AudioSessionMonitorPtr CreateAudioSessionMonitor(SessionStateCallback callback) {
+    return AudioSessionMonitorPtr(new AudioSessionMonitor(callback));
+}
+
+AudioSessionMonitorPtr CreateEnhancedAudioSessionMonitor(EnhancedSessionCallback callback) {
+    return AudioSessionMonitorPtr(new AudioSessionMonitor(callback));
+}
+
+void DestroyAudioSessionMonitor(AudioSessionMonitorPtr& monitor) {
+    monitor.reset();
 }

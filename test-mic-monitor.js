@@ -10,15 +10,15 @@
 const { getRunningInputAudioProcesses, INFO_ERROR_CODE, ERROR_DOMAIN } = require('./index');
 const EventEmitter = require('events');
 
-// Only import mic monitoring functions on Darwin (macOS) systems
-const { startMonitoringMic, stopMonitoringMic } = process.platform === 'darwin'
+// Import mic monitoring functions for supported platforms (macOS and Windows)
+const { startMonitoringMic, stopMonitoringMic } = ['darwin', 'win32'].includes(process.platform)
   ? require('./index')
   : {
       startMonitoringMic: () => {
-        throw new Error('Microphone monitoring is only supported on macOS');
+        throw new Error('Microphone monitoring is only supported on macOS and Windows');
       },
       stopMonitoringMic: () => {
-        // No-op for non-Darwin systems
+        // No-op for unsupported systems
       }
     };
 
@@ -127,10 +127,13 @@ console.log('Press Ctrl+C to stop.\n');
 
 displayMicProcesses();
 
-if (process.platform === 'darwin') {
+if (['darwin', 'win32'].includes(process.platform)) {
+  console.log(`Platform: ${process.platform}`);
   startMicrophoneStatusEmitter();
   // Keep the process running
   process.stdin.resume();
+} else {
+  console.log('Microphone monitoring is only supported on macOS and Windows');
 }
 
 

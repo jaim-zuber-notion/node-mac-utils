@@ -34,5 +34,14 @@ module.exports = {
     makeKeyAndOrderFront: platform_utils.makeKeyAndOrderFront,
     startMonitoringMic: platform_utils.startMonitoringMic,
     stopMonitoringMic: platform_utils.stopMonitoringMic,
+  } : {}),
+  
+  // Windows-specific event monitoring exports
+  ...(process.platform === 'win32' ? {
+    createAudioSessionMonitor: platform_utils.createAudioSessionMonitor,
+    createEnhancedAudioSessionMonitor: platform_utils.createEnhancedAudioSessionMonitor,
+    destroyAudioSessionMonitor: platform_utils.destroyAudioSessionMonitor,
+    startMonitoringMic: platform_utils.startMonitoringMic,
+    stopMonitoringMic: platform_utils.stopMonitoringMic,
   } : {})
 };
