@@ -24,23 +24,15 @@ const { startMonitoringMic, stopMonitoringMic } = ['darwin', 'win32'].includes(p
 
 class MicrophoneStatusEmitter extends EventEmitter {
   start() {
-    startMonitoringMic((microphoneActive, errorOrRenderProcesses) => {
-      if (process.platform === 'darwin') {
-        // macOS: second parameter is error
-        const error = errorOrRenderProcesses;
-        if (error) {
-          if (error.code === INFO_ERROR_CODE && error.domain === ERROR_DOMAIN) {
-            this.emit('info', error.message);
-          } else {
-            this.emit('error', error.message);
-          }
+    startMonitoringMic((microphoneActive, error) => {
+      if (error) {
+        if (error.code === INFO_ERROR_CODE && error.domain === ERROR_DOMAIN) {
+          this.emit('info', error.message);
         } else {
-          this.emit('status', microphoneActive);
+          this.emit('error', error.message);
         }
       } else {
-        // Windows: second parameter is render processes array
-        const renderProcesses = errorOrRenderProcesses || [];
-        this.emit('status', microphoneActive, renderProcesses);
+        this.emit('status', microphoneActive);
       }
     });
   }
@@ -75,18 +67,38 @@ async function displayMicProcesses() {
   }
 }
 
+// Function to display speaker/render processes (Windows only)
+async function displaySpeakerProcesses() {
+  try {
+    // Import getRenderProcesses only if available (Windows)
+    const { getRenderProcesses } = process.platform === 'win32' 
+      ? require('./index')
+      : { getRenderProcesses: () => { throw new Error('Speaker process detection is only supported on Windows'); } };
+    
+    console.log('\n--- Current Speaker Processes ---');
+    const processes = getRenderProcesses();
+
+    if (processes.length === 0) {
+      console.log('No processes are currently using speakers');
+    } else {
+      console.log('Processes using speakers:');
+      processes.forEach((process, index) => {
+        console.log(`${index + 1}. ${process.processName} (PID: ${process.processId}) on ${process.deviceName}`);
+      });
+    }
+  } catch (error) {
+    console.error('Error getting speaker processes:', error.message);
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+  }
+}
+
 function startMicrophoneStatusEmitter() {
   const emitter = new MicrophoneStatusEmitter();
 
-  emitter.on('status', (isActive, renderProcesses) => {
+  emitter.on('status', (isActive) => {
     console.log('🎤 Microphone Status: ' + isActive);
-    
-    if (process.platform === 'win32' && renderProcesses && renderProcesses.length > 0) {
-      console.log('🔊 Speaker processes:');
-      renderProcesses.forEach(proc => {
-        console.log(`  - ${proc.processName} (PID: ${proc.processId}) on ${proc.deviceName}`);
-      });
-    }
   });
 
   emitter.on('info', (info) => {
@@ -141,6 +153,11 @@ console.log('Starting microphone monitoring...');
 console.log('Press Ctrl+C to stop.\n');
 
 displayMicProcesses();
+
+// Display speaker processes on Windows
+if (process.platform === 'win32') {
+  displaySpeakerProcesses();
+}
 
 if (['darwin', 'win32'].includes(process.platform)) {
   console.log(`Platform: ${process.platform}`);

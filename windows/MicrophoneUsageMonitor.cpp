@@ -166,130 +166,15 @@ bool MicrophoneUsageMonitor::HasActiveMicrophoneSessions() {
     return hasActiveSessions;
 }
 
-std::vector<RenderProcessInfo> MicrophoneUsageMonitor::GetActiveRenderProcesses() {
-    std::vector<RenderProcessInfo> processes;
-    
-    if (!m_deviceEnumerator) return processes;
-    
-    IMMDeviceCollection* pCollection = nullptr;
-    // Key difference: eRender instead of eCapture for speaker/output devices
-    HRESULT hr = m_deviceEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
-    if (FAILED(hr)) return processes;
-    
-    UINT deviceCount = 0;
-    pCollection->GetCount(&deviceCount);
-    
-    // Check each active render device
-    for (UINT deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++) {
-        IMMDevice* pDevice = nullptr;
-        hr = pCollection->Item(deviceIndex, &pDevice);
-        if (FAILED(hr)) continue;
-        
-        std::string deviceName = GetDeviceName(pDevice);
-        
-        IAudioSessionManager2* pSessionManager = nullptr;
-        hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
-        if (SUCCEEDED(hr)) {
-            IAudioSessionEnumerator* pSessionEnum = nullptr;
-            hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
-            if (SUCCEEDED(hr)) {
-                int sessionCount = 0;
-                pSessionEnum->GetCount(&sessionCount);
-                
-                for (int i = 0; i < sessionCount; i++) {
-                    IAudioSessionControl* pSessionControl = nullptr;
-                    hr = pSessionEnum->GetSession(i, &pSessionControl);
-                    if (FAILED(hr)) continue;
-                    
-                    IAudioSessionControl2* pSessionControl2 = nullptr;
-                    hr = pSessionControl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pSessionControl2);
-                    if (SUCCEEDED(hr)) {
-                        DWORD processId = 0;
-                        pSessionControl2->GetProcessId(&processId);
-                        
-                        AudioSessionState state;
-                        pSessionControl2->GetState(&state);
-                        
-                        // Check if session is active and has some volume
-                        ISimpleAudioVolume* pVolume = nullptr;
-                        bool hasAudio = false;
-                        hr = pSessionControl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&pVolume);
-                        if (SUCCEEDED(hr)) {
-                            float sessionVolume = 0.0f;
-                            pVolume->GetMasterVolume(&sessionVolume);
-                            BOOL isMuted = FALSE;
-                            pVolume->GetMute(&isMuted);
-                            
-                            // For render sessions, we want active sessions that aren't muted
-                            // Volume can be low but still considered active
-                            hasAudio = (state == AudioSessionStateActive && !isMuted);
-                            pVolume->Release();
-                        }
-                        
-                        if (processId != 0 && hasAudio) {
-                            RenderProcessInfo info;
-                            info.processId = processId;
-                            info.processName = GetProcessName(processId);
-                            info.deviceName = deviceName;
-                            info.isActive = true;
-                            processes.push_back(info);
-                        }
-                        
-                        pSessionControl2->Release();
-                    }
-                    pSessionControl->Release();
-                }
-                pSessionEnum->Release();
-            }
-            pSessionManager->Release();
-        }
-        
-        pDevice->Release();
-    }
-    
-    pCollection->Release();
-    return processes;
-}
-
-std::string MicrophoneUsageMonitor::GetDeviceName(IMMDevice* pDevice) {
-    if (!pDevice) return "Unknown Device";
-    
-    IPropertyStore* pProps = nullptr;
-    HRESULT hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
-    if (FAILED(hr)) return "Unknown Device";
-    
-    PROPVARIANT varName;
-    PropVariantInit(&varName);
-    hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
-    
-    std::string deviceName = "Unknown Device";
-    if (SUCCEEDED(hr) && varName.vt == VT_LPWSTR) {
-        std::wstring wDeviceName(varName.pwszVal);
-        deviceName.resize(wDeviceName.size() * 4); // Generous buffer for UTF8
-        int bytesWritten = WideCharToMultiByte(CP_UTF8, 0, wDeviceName.c_str(), -1, 
-                                             &deviceName[0], deviceName.size(), nullptr, nullptr);
-        if (bytesWritten > 0) {
-            deviceName.resize(bytesWritten - 1); // Remove null terminator
-        }
-    }
-    
-    PropVariantClear(&varName);
-    pProps->Release();
-    return deviceName;
-}
-
 void MicrophoneUsageMonitor::CheckAndReportStateChange() {
     if (!m_callback) return;
     
     bool currentState = HasActiveMicrophoneSessions();
-    std::vector<RenderProcessInfo> renderProcesses = GetActiveRenderProcesses();
     
     // Only report if microphone state actually changed
-    // Note: We always include current render processes even if mic state didn't change
-    // This gives real-time updates on what's playing audio
     if (currentState != m_lastReportedState) {
         m_lastReportedState = currentState;
-        m_callback(currentState, renderProcesses);
+        m_callback(currentState);
     }
 }
 

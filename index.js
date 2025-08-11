@@ -43,5 +43,6 @@ module.exports = {
     destroyAudioSessionMonitor: platform_utils.destroyAudioSessionMonitor,
     startMonitoringMic: platform_utils.startMonitoringMic,
     stopMonitoringMic: platform_utils.stopMonitoringMic,
+    getRenderProcesses: platform_utils.getRenderProcesses,
   } : {})
 };

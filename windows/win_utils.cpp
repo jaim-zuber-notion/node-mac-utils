@@ -309,27 +309,16 @@ Napi::Value StartMonitoringMic(const Napi::CallbackInfo& info) {
         // Create monitor
         g_micMonitor = std::make_unique<MicrophoneUsageMonitor>();
         
-        // Start monitoring with callback that includes render processes
-        bool success = g_micMonitor->StartMonitoring([](bool microphoneActive, const std::vector<RenderProcessInfo>& renderProcesses) {
+        // Start monitoring with callback matching macOS interface exactly
+        bool success = g_micMonitor->StartMonitoring([](bool microphoneActive) {
             if (!g_micMonitorCallback) return;
             
             auto callback = [=](Napi::Env env, Napi::Function jsCallback) {
-                // Create render processes array
-                Napi::Array renderArray = Napi::Array::New(env);
-                for (size_t i = 0; i < renderProcesses.size(); i++) {
-                    Napi::Object processObj = Napi::Object::New(env);
-                    processObj.Set("processName", Napi::String::New(env, renderProcesses[i].processName));
-                    processObj.Set("processId", Napi::Number::New(env, renderProcesses[i].processId));
-                    processObj.Set("deviceName", Napi::String::New(env, renderProcesses[i].deviceName));
-                    processObj.Set("isActive", Napi::Boolean::New(env, renderProcesses[i].isActive));
-                    renderArray.Set(i, processObj);
-                }
-                
-                // Call JavaScript callback with (microphoneActive, renderProcesses)  
-                // This extends the macOS interface to include speaker process info
+                // Call JavaScript callback with (microphoneActive, error) to match macOS interface exactly
+                // On Windows, we don't have errors in the same way, so pass null for error
                 jsCallback.Call({
                     Napi::Boolean::New(env, microphoneActive),
-                    renderArray
+                    env.Null()  // null error to match macOS (microphoneActive, error) signature
                 });
             };
             
@@ -371,6 +360,30 @@ Napi::Value StopMonitoringMic(const Napi::CallbackInfo& info) {
     }
 }
 
+// Get processes using speakers/render devices - Windows only
+Napi::Value GetRenderProcesses(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    try {
+        std::vector<RenderProcessInfo> processes = ::GetRenderProcesses();
+
+        Napi::Array result = Napi::Array::New(env);
+        for (size_t i = 0; i < processes.size(); i++) {
+            Napi::Object processObj = Napi::Object::New(env);
+            processObj.Set("processName", Napi::String::New(env, processes[i].processName));
+            processObj.Set("processId", Napi::Number::New(env, processes[i].processId));
+            processObj.Set("deviceName", Napi::String::New(env, processes[i].deviceName));
+            processObj.Set("isActive", Napi::Boolean::New(env, processes[i].isActive));
+            result.Set(i, processObj);
+        }
+
+        return result;
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
 // Initialize the module exports
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   Napi::Value (*originalAudioProcessesFunc)(const Napi::CallbackInfo&) = GetRunningInputAudioProcesses;
@@ -380,6 +393,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   Napi::Value (*destroyMonitorFunc)(const Napi::CallbackInfo&) = DestroyAudioSessionMonitor;
   Napi::Value (*startMonitoringMicFunc)(const Napi::CallbackInfo&) = StartMonitoringMic;
   Napi::Value (*stopMonitoringMicFunc)(const Napi::CallbackInfo&) = StopMonitoringMic;
+  Napi::Value (*getRenderProcessesFunc)(const Napi::CallbackInfo&) = GetRenderProcesses;
 
   // Existing polling-based functions
   exports.Set("getRunningInputAudioProcesses",
@@ -400,6 +414,10 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
               Napi::Function::New(env, startMonitoringMicFunc));
   exports.Set("stopMonitoringMic",
               Napi::Function::New(env, stopMonitoringMicFunc));
+
+  // Speaker/render process detection - Windows only
+  exports.Set("getRenderProcesses",
+              Napi::Function::New(env, getRenderProcessesFunc));
 
   return exports;
 }

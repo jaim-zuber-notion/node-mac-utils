@@ -24,6 +24,16 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult();
 // Hardened audio activity detection (includes Bluetooth handling)
 bool HasActiveAudio(IMMDevice* pDevice);
 
+// Speaker/render process detection for Windows
+struct RenderProcessInfo {
+    std::string processName;
+    DWORD processId;
+    std::string deviceName;
+    bool isActive;
+};
+
+std::vector<RenderProcessInfo> GetRenderProcesses();
+
 // Forward declarations for event-driven monitoring
 class AudioSessionMonitor;
 

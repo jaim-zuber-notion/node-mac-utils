@@ -37,6 +37,26 @@ async function runTests() {
             console.log('\nTesting Windows-specific functions:');
             console.log('getRunningInputAudioProcesses available:', !!utils.getRunningInputAudioProcesses);
             console.log('getProcessesAccessingMicrophoneWithResult available:', !!utils.getProcessesAccessingMicrophoneWithResult);
+            console.log('startMonitoringMic available:', !!utils.startMonitoringMic);
+            console.log('stopMonitoringMic available:', !!utils.stopMonitoringMic);
+            console.log('getRenderProcesses available:', !!utils.getRenderProcesses);
+            
+            // Test speaker/render process detection
+            if (utils.getRenderProcesses) {
+                console.log('\nTesting Windows Speaker Process Detection:');
+                const renderProcesses = utils.getRenderProcesses();
+                console.log('Type:', typeof renderProcesses);
+                console.log('Is Array:', Array.isArray(renderProcesses));
+                
+                if (renderProcesses.length === 0) {
+                    console.log('No processes are currently using speakers');
+                } else {
+                    console.log('Processes using speakers:');
+                    renderProcesses.forEach((process, index) => {
+                        console.log(`  ${index + 1}. ${process.processName} (PID: ${process.processId}) on ${process.deviceName}`);
+                    });
+                }
+            }
         } else {
             console.log('node-mac-utils Unsupported platform:', process.platform);
         }
