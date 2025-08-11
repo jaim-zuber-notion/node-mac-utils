@@ -318,7 +318,7 @@ static bool CheckSessionsForActivity(IMMDevice* pDevice, bool isBluetooth = fals
 }
 
 // Enhanced function to check if device has active audio with debouncing
-static bool HasActiveAudio(IMMDevice* pDevice) {
+bool HasActiveAudio(IMMDevice* pDevice) {
     bool isBluetooth = IsBluetoothDevice(pDevice);
     std::wstring deviceId = GetDeviceId(pDevice);
     bool hasActiveAudio = false;

@@ -21,6 +21,9 @@ std::vector<std::string> GetAudioInputProcesses();
 // New function with structured result
 AudioProcessResult GetProcessesAccessingMicrophoneWithResult();
 
+// Hardened audio activity detection (includes Bluetooth handling)
+bool HasActiveAudio(IMMDevice* pDevice);
+
 // Forward declarations for event-driven monitoring
 class AudioSessionMonitor;
 

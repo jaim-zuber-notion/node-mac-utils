@@ -310,7 +310,7 @@ Napi::Value StartMonitoringMic(const Napi::CallbackInfo& info) {
         g_micMonitor = std::make_unique<MicrophoneUsageMonitor>();
         
         // Start monitoring with callback matching macOS interface
-        bool success = g_micMonitor->StartMonitoring([](bool microphoneActive, const std::vector<ProcessInfo>& processes) {
+        bool success = g_micMonitor->StartMonitoring([](bool microphoneActive) {
             if (!g_micMonitorCallback) return;
             
             auto callback = [=](Napi::Env env, Napi::Function jsCallback) {

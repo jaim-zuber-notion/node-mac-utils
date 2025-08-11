@@ -1,36 +1,9 @@
 #include "MicrophoneUsageMonitor.h"
+#include "AudioProcessMonitor.h"  // For hardened HasActiveAudio logic
 #include <iostream>
-#include <psapi.h>
 
 #pragma comment(lib, "Ole32.lib")
 
-// Helper function to get process name from PID
-static std::string GetProcessName(DWORD processId) {
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-    if (!hProcess) return "Unknown";
-    
-    WCHAR path[MAX_PATH];
-    DWORD size = MAX_PATH;
-    
-    if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
-        CloseHandle(hProcess);
-        
-        // Convert to UTF8 and extract filename
-        int strSize = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
-        std::string fullPath(strSize, 0);
-        WideCharToMultiByte(CP_UTF8, 0, path, -1, &fullPath[0], strSize, nullptr, nullptr);
-        if (!fullPath.empty() && fullPath.back() == 0) {
-            fullPath.pop_back();
-        }
-        
-        // Extract just the filename
-        size_t lastSlash = fullPath.find_last_of("\\");
-        return (lastSlash != std::string::npos) ? fullPath.substr(lastSlash + 1) : fullPath;
-    }
-    
-    CloseHandle(hProcess);
-    return "Unknown";
-}
 
 MicrophoneUsageMonitor::MicrophoneUsageMonitor() 
     : m_refCount(1), m_deviceEnumerator(nullptr), m_isMonitoring(false), m_lastReportedState(false) {
@@ -132,79 +105,46 @@ void MicrophoneUsageMonitor::CleanupSessionMonitoring() {
     m_sessionManagers.clear();
 }
 
-std::vector<ProcessInfo> MicrophoneUsageMonitor::GetActiveProcesses() {
-    std::vector<ProcessInfo> processes;
-    
-    if (!m_deviceEnumerator) return processes;
+bool MicrophoneUsageMonitor::HasActiveMicrophoneSessions() {
+    if (!m_deviceEnumerator) return false;
     
     IMMDeviceCollection* pCollection = nullptr;
     HRESULT hr = m_deviceEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
-    if (FAILED(hr)) return processes;
+    if (FAILED(hr)) return false;
     
     UINT deviceCount = 0;
     pCollection->GetCount(&deviceCount);
     
-    for (UINT deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++) {
+    bool hasActiveSessions = false;
+    
+    // Check each active capture device using the hardened HasActiveAudio logic
+    for (UINT deviceIndex = 0; deviceIndex < deviceCount && !hasActiveSessions; deviceIndex++) {
         IMMDevice* pDevice = nullptr;
         hr = pCollection->Item(deviceIndex, &pDevice);
         if (FAILED(hr)) continue;
         
-        IAudioSessionManager2* pSessionManager = nullptr;
-        hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
-        if (SUCCEEDED(hr)) {
-            IAudioSessionEnumerator* pSessionEnum = nullptr;
-            hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
-            if (SUCCEEDED(hr)) {
-                int sessionCount = 0;
-                pSessionEnum->GetCount(&sessionCount);
-                
-                for (int i = 0; i < sessionCount; i++) {
-                    IAudioSessionControl* pSessionControl = nullptr;
-                    hr = pSessionEnum->GetSession(i, &pSessionControl);
-                    if (FAILED(hr)) continue;
-                    
-                    IAudioSessionControl2* pSessionControl2 = nullptr;
-                    hr = pSessionControl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pSessionControl2);
-                    if (SUCCEEDED(hr)) {
-                        DWORD processId = 0;
-                        pSessionControl2->GetProcessId(&processId);
-                        
-                        AudioSessionState state;
-                        pSessionControl2->GetState(&state);
-                        
-                        if (processId != 0 && state == AudioSessionStateActive) {
-                            ProcessInfo info;
-                            info.processId = processId;
-                            info.processName = GetProcessName(processId);
-                            processes.push_back(info);
-                        }
-                        
-                        pSessionControl2->Release();
-                    }
-                    pSessionControl->Release();
-                }
-                pSessionEnum->Release();
-            }
-            pSessionManager->Release();
+        // Use the existing hardened detection logic from AudioProcessMonitor
+        // This includes Bluetooth device handling, debouncing, and multi-tier detection
+        if (HasActiveAudio(pDevice)) {
+            hasActiveSessions = true;
         }
         
         pDevice->Release();
     }
     
     pCollection->Release();
-    return processes;
+    return hasActiveSessions;
 }
 
 void MicrophoneUsageMonitor::CheckAndReportStateChange() {
     if (!m_callback) return;
     
-    std::vector<ProcessInfo> processes = GetActiveProcesses();
-    bool currentState = !processes.empty();
+    bool currentState = HasActiveMicrophoneSessions();
     
     // Only report if state actually changed
     if (currentState != m_lastReportedState) {
         m_lastReportedState = currentState;
-        m_callback(currentState, processes);
+        m_callback(currentState);
     }
 }
 
