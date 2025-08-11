@@ -309,16 +309,27 @@ Napi::Value StartMonitoringMic(const Napi::CallbackInfo& info) {
         // Create monitor
         g_micMonitor = std::make_unique<MicrophoneUsageMonitor>();
         
-        // Start monitoring with callback matching macOS interface
-        bool success = g_micMonitor->StartMonitoring([](bool microphoneActive) {
+        // Start monitoring with callback that includes render processes
+        bool success = g_micMonitor->StartMonitoring([](bool microphoneActive, const std::vector<RenderProcessInfo>& renderProcesses) {
             if (!g_micMonitorCallback) return;
             
             auto callback = [=](Napi::Env env, Napi::Function jsCallback) {
-                // Call JavaScript callback with (microphoneActive, error) to match macOS interface
-                // On Windows, we don't have errors in the same way, so pass null for error
+                // Create render processes array
+                Napi::Array renderArray = Napi::Array::New(env);
+                for (size_t i = 0; i < renderProcesses.size(); i++) {
+                    Napi::Object processObj = Napi::Object::New(env);
+                    processObj.Set("processName", Napi::String::New(env, renderProcesses[i].processName));
+                    processObj.Set("processId", Napi::Number::New(env, renderProcesses[i].processId));
+                    processObj.Set("deviceName", Napi::String::New(env, renderProcesses[i].deviceName));
+                    processObj.Set("isActive", Napi::Boolean::New(env, renderProcesses[i].isActive));
+                    renderArray.Set(i, processObj);
+                }
+                
+                // Call JavaScript callback with (microphoneActive, renderProcesses)  
+                // This extends the macOS interface to include speaker process info
                 jsCallback.Call({
                     Napi::Boolean::New(env, microphoneActive),
-                    env.Null()  // null error to match macOS (microphoneActive, error) signature
+                    renderArray
                 });
             };
             

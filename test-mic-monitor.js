@@ -24,15 +24,23 @@ const { startMonitoringMic, stopMonitoringMic } = ['darwin', 'win32'].includes(p
 
 class MicrophoneStatusEmitter extends EventEmitter {
   start() {
-    startMonitoringMic((microphoneActive, error) => {
-      if (error) {
-        if (error.code === INFO_ERROR_CODE && error.domain === ERROR_DOMAIN) {
-          this.emit('info', error.message);
+    startMonitoringMic((microphoneActive, errorOrRenderProcesses) => {
+      if (process.platform === 'darwin') {
+        // macOS: second parameter is error
+        const error = errorOrRenderProcesses;
+        if (error) {
+          if (error.code === INFO_ERROR_CODE && error.domain === ERROR_DOMAIN) {
+            this.emit('info', error.message);
+          } else {
+            this.emit('error', error.message);
+          }
         } else {
-          this.emit('error', error.message);
+          this.emit('status', microphoneActive);
         }
       } else {
-        this.emit('status', microphoneActive);
+        // Windows: second parameter is render processes array
+        const renderProcesses = errorOrRenderProcesses || [];
+        this.emit('status', microphoneActive, renderProcesses);
       }
     });
   }
@@ -70,8 +78,15 @@ async function displayMicProcesses() {
 function startMicrophoneStatusEmitter() {
   const emitter = new MicrophoneStatusEmitter();
 
-  emitter.on('status', (isActive) => {
+  emitter.on('status', (isActive, renderProcesses) => {
     console.log('🎤 Microphone Status: ' + isActive);
+    
+    if (process.platform === 'win32' && renderProcesses && renderProcesses.length > 0) {
+      console.log('🔊 Speaker processes:');
+      renderProcesses.forEach(proc => {
+        console.log(`  - ${proc.processName} (PID: ${proc.processId}) on ${proc.deviceName}`);
+      });
+    }
   });
 
   emitter.on('info', (info) => {

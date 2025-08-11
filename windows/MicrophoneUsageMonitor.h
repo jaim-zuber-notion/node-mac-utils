@@ -10,8 +10,16 @@
 // Forward declaration
 class MicrophoneUsageMonitor;
 
-// Simple callback types matching macOS pattern - no process info needed
-typedef std::function<void(bool microphoneActive)> MicUsageCallback;
+// Process information for render (speaker) sessions  
+struct RenderProcessInfo {
+    std::string processName;
+    DWORD processId;
+    std::string deviceName;
+    bool isActive;
+};
+
+// Enhanced callback that includes both microphone state and render processes
+typedef std::function<void(bool microphoneActive, const std::vector<RenderProcessInfo>& renderProcesses)> MicUsageCallback;
 
 // Minimal monitoring class focused on session start/stop detection
 class MicrophoneUsageMonitor : public IAudioSessionNotification, public IAudioSessionEvents {
@@ -26,6 +34,8 @@ private:
     void InitializeSessionMonitoring();
     void CleanupSessionMonitoring();
     bool HasActiveMicrophoneSessions();
+    std::vector<RenderProcessInfo> GetActiveRenderProcesses();
+    std::string GetDeviceName(IMMDevice* pDevice);
     void CheckAndReportStateChange();
 
 public:
