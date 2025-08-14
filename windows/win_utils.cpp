@@ -1,6 +1,7 @@
 #include <napi.h>
 #include <windows.h>
 #include <memory>
+#include <chrono>
 #include <unordered_map>
 #include "AudioProcessMonitor.h"
 #include "MicrophoneUsageMonitor.h"
@@ -94,11 +95,11 @@ public:
             Napi::Object eventObj = Napi::Object::New(env);
             eventObj.Set("processName", Napi::String::New(env, processName));
             eventObj.Set("isActive", Napi::Boolean::New(env, isActive));
-            eventObj.Set("timestamp", Napi::Date::New(env, static_cast<double>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()
-                ).count()
-            )));
+            double timestamp = static_cast<double>(
+                   std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch()
+                ).count());
+            eventObj.Set("timestamp", Napi::Date::New(env, timestamp));
             
             jsCallback.Call({eventObj});
         };
@@ -136,11 +137,11 @@ public:
             eventObj.Set("processId", Napi::Number::New(env, info.processId));
             eventObj.Set("deviceName", Napi::String::New(env, info.deviceName));
             eventObj.Set("isActive", Napi::Boolean::New(env, info.isActive));
-            eventObj.Set("timestamp", Napi::Date::New(env, static_cast<double>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()
-                ).count()
-            )));
+            double timestamp = static_cast<double>(
+                   std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch()
+                ).count());
+            eventObj.Set("timestamp", Napi::Date::New(env, timestamp));
             
             jsCallback.Call({eventObj});
         };
