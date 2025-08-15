@@ -19,30 +19,95 @@ async function runTests() {
         console.log('Result:', result);
 
         if (result.success) {
-            console.log('✓ Success - Audio processes:', result.processes);
+            console.log('✓ Success - Microphone processes:', result.processes);
             console.log('  Process count:', result.processes.length);
         } else {
-            console.error('✗ Error getting audio processes:', result.error);
+            console.error('✗ Error getting microphone processes:', result.error);
             console.error('  Error code:', result.code);
             console.error('  Error domain:', result.domain);
         }
 
-        // Test platform-specific functions
-        if (process.platform === 'darwin') {
-            console.log('\nTesting Mac-specific functions:');
-            console.log('makeKeyAndOrderFront available:', !!utils.makeKeyAndOrderFront);
-            console.log('startMonitoringMic available:', !!utils.startMonitoringMic);
-            console.log('stopMonitoringMic available:', !!utils.stopMonitoringMic);
-        } else if (process.platform === 'win32') {
-            console.log('\nTesting Windows-specific functions:');
-            console.log('getRunningInputAudioProcesses available:', !!utils.getRunningInputAudioProcesses);
-            console.log('getProcessesAccessingMicrophoneWithResult available:', !!utils.getProcessesAccessingMicrophoneWithResult);
+        // Test new speaker detection functionality
+        console.log('\nTesting getProcessesAccessingSpeakerWithResult (new):');
+        const speakerResult = utils.getProcessesAccessingSpeakerWithResult();
+        console.log('Type:', typeof speakerResult);
+        console.log('Result:', speakerResult);
+
+        if (speakerResult.success) {
+            console.log('✓ Success - Speaker processes:', speakerResult.processes);
+            console.log('  Speaker process count:', speakerResult.processes.length);
+            if (speakerResult.processes.length > 0) {
+                console.log('  Active speaker processes:');
+                speakerResult.processes.forEach((proc, index) => {
+                    console.log(`    ${index + 1}. ${proc}`);
+                });
+            }
         } else {
-            console.log('node-mac-utils Unsupported platform:', process.platform);
+            console.log('✗ Speaker detection:', speakerResult.error);
+            if (speakerResult.code) console.log('  Error code:', speakerResult.code);
+            if (speakerResult.domain) console.log('  Error domain:', speakerResult.domain);
+        }
+
+        // Test Bluetooth device detection
+        console.log('\nTesting isBluetoothDevice:');
+        const testDeviceIds = ['fake-device-id', 'test-bluetooth-device'];
+        testDeviceIds.forEach(deviceId => {
+            try {
+                const isBluetooth = utils.isBluetoothDevice(deviceId);
+                console.log(`  ${deviceId}: ${isBluetooth ? 'Bluetooth' : 'Not Bluetooth'}`);
+            } catch (error) {
+                console.log(`  ${deviceId}: Error - ${error.message}`);
+            }
+        });
+
+        // Test platform-specific functions and cross-platform capabilities
+        if (process.platform === 'darwin') {
+            console.log('\nTesting macOS functions:');
+            console.log('  makeKeyAndOrderFront available:', !!utils.makeKeyAndOrderFront);
+            console.log('  startMonitoringMic available:', !!utils.startMonitoringMic);
+            console.log('  stopMonitoringMic available:', !!utils.stopMonitoringMic);
+            console.log('  getProcessesAccessingSpeakerWithResult:', speakerResult.error || 'Available but returns error (expected on macOS)');
+            console.log('  isBluetoothDevice: Returns false (no-op on macOS)');
+        } else if (process.platform === 'win32') {
+            console.log('\nTesting Windows functions:');
+            console.log('  getRunningInputAudioProcesses available:', !!utils.getRunningInputAudioProcesses);
+            console.log('  getProcessesAccessingMicrophoneWithResult available:', !!utils.getProcessesAccessingMicrophoneWithResult);
+            console.log('  getProcessesAccessingSpeakerWithResult available:', !!utils.getProcessesAccessingSpeakerWithResult);
+            console.log('  isBluetoothDevice available:', !!utils.isBluetoothDevice);
+            console.log('  startMonitoringMic available (NEW for Windows):', !!utils.startMonitoringMic);
+            console.log('  stopMonitoringMic available (NEW for Windows):', !!utils.stopMonitoringMic);
+        } else {
+            console.log('Unsupported platform:', process.platform);
+            console.log('All functions should return no-op values');
+        }
+
+        // Audio Summary Section
+        console.log('\n' + '='.repeat(60));
+        console.log('🎵 AUDIO PROCESS SUMMARY');
+        console.log('='.repeat(60));
+        
+        console.log('\n🎤 MICROPHONE PROCESSES:');
+        if (result.success && result.processes.length > 0) {
+            result.processes.forEach((proc, index) => {
+                console.log(`  ${index + 1}. ${proc}`);
+            });
+        } else {
+            console.log('  No active microphone processes detected');
+        }
+        
+        console.log('\n🔊 SPEAKER PROCESSES:');
+        if (speakerResult.success && speakerResult.processes.length > 0) {
+            speakerResult.processes.forEach((proc, index) => {
+                console.log(`  ${index + 1}. ${proc}`);
+            });
+        } else if (speakerResult.error) {
+            console.log(`  ${speakerResult.error}`);
+        } else {
+            console.log('  No active speaker processes detected');
         }
 
         // Compare both methods
-        console.log('\nComparing both methods:');
+        console.log('\n📊 METHOD COMPARISON:');
         console.log('Original method returns:', Array.isArray(processes) ? 'Array' : typeof processes);
         console.log('New method returns:', typeof result === 'object' && result.hasOwnProperty('success') ? 'Structured Object' : typeof result);
 
@@ -52,7 +117,7 @@ async function runTests() {
         }
 
         // Log all available exports
-        console.log('\nAll available exports:');
+        console.log('\n📋 ALL AVAILABLE EXPORTS:');
         console.log(Object.keys(utils));
 
     } catch (error) {
