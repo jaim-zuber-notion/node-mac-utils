@@ -19,6 +19,9 @@ std::vector<std::string> GetAudioInputProcesses();
 // New function with structured result
 AudioProcessResult GetProcessesAccessingMicrophoneWithResult();
 
+// Speaker detection function with structured result  
+AudioProcessResult GetProcessesAccessingSpeakerWithResult();
+
 // Enhanced audio activity detection with 4-tier detection system
 bool HasActiveAudio(void* pDevice);
 

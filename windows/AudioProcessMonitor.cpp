@@ -439,6 +439,105 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
     return result;
 }
 
+// Enhanced function for speaker/output processes with structured result using enumeration of all devices
+AudioProcessResult GetProcessesAccessingSpeakerWithResult() {
+    AudioProcessResult result;
+    std::unordered_set<std::string> seen;
+    HRESULT hr = CoInitialize(nullptr);
+
+    if (FAILED(hr)) {
+        result.errorCode = hr;
+        result.errorMessage = "Failed to initialize COM";
+        result.success = false;
+        return result;
+    }
+
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    IMMDeviceCollection* pCollection = nullptr;
+
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    if (FAILED(hr)) {
+        result.errorCode = hr;
+        result.errorMessage = "Failed to create device enumerator";
+        result.success = false;
+        CoUninitialize();
+        return result;
+    }
+
+    // Get ALL active render (speaker/output) devices instead of just default
+    hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+    if (FAILED(hr)) {
+        result.errorCode = hr;
+        result.errorMessage = "Failed to enumerate audio endpoints";
+        result.success = false;
+        pEnumerator->Release();
+        CoUninitialize();
+        return result;
+    }
+
+    UINT deviceCount = 0;
+    pCollection->GetCount(&deviceCount);
+
+    // Check each active render device
+    for (UINT deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++) {
+        IMMDevice* pDevice = nullptr;
+        hr = pCollection->Item(deviceIndex, &pDevice);
+        if (FAILED(hr)) continue;
+
+        // Use enhanced activity detection (no Bluetooth special handling)
+        if (HasActiveAudio(pDevice)) {
+            IAudioSessionManager2* pSessionManager = nullptr;
+            hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
+            if (SUCCEEDED(hr)) {
+                IAudioSessionEnumerator* pSessionEnum = nullptr;
+                hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
+                if (SUCCEEDED(hr)) {
+                    int sessionCount = 0;
+                    pSessionEnum->GetCount(&sessionCount);
+
+                    for (int i = 0; i < sessionCount; i++) {
+                        IAudioSessionControl* pSessionControl = nullptr;
+                        hr = pSessionEnum->GetSession(i, &pSessionControl);
+                        if (FAILED(hr)) continue;
+
+                        IAudioSessionControl2* pSessionControl2 = nullptr;
+                        hr = pSessionControl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pSessionControl2);
+                        if (SUCCEEDED(hr)) {
+                            DWORD processID = 0;
+                            pSessionControl2->GetProcessId(&processID);
+
+                            AudioSessionState state;
+                            pSessionControl2->GetState(&state);
+
+                            if (processID != 0 && state == AudioSessionStateActive) {
+                                std::string processPath = GetProcessExecutablePath(processID);
+
+                                // Only insert if not already seen
+                                if (seen.insert(processPath).second) {
+                                    result.processes.push_back(processPath);
+                                }
+                            }
+                            pSessionControl2->Release();
+                        }
+                        pSessionControl->Release();
+                    }
+                    pSessionEnum->Release();
+                }
+                pSessionManager->Release();
+            }
+        }
+
+        pDevice->Release();
+    }
+
+    // Cleanup
+    pCollection->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+
+    return result;
+}
+
 std::vector<std::string> GetAudioInputProcesses() {
     std::vector<std::string> results;
     std::unordered_set<std::string> seen;  // Track unique strings
