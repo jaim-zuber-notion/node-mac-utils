@@ -25,6 +25,9 @@ bool HasActiveAudio(void* pDevice);
 // Bluetooth device detection utility
 bool IsBluetoothDevice(void* pDevice);
 
+// Helper function to check Bluetooth device by ID string
+bool IsBluetoothDeviceById(const std::string& deviceId);
+
 // Speaker/render process detection for Windows
 struct RenderProcessInfo {
     std::string processName;

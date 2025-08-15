@@ -57,15 +57,43 @@ Napi::Value GetProcessesAccessingMicrophoneWithResult(const Napi::CallbackInfo& 
   }
 }
 
+// Check if a device is a Bluetooth device (Windows-specific utility)
+Napi::Value IsBluetoothDevice(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1) {
+    Napi::TypeError::New(env, "Expected one argument: deviceId").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsString()) {
+    Napi::TypeError::New(env, "Device ID must be a string").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  try {
+    std::string deviceIdStr = info[0].As<Napi::String>().Utf8Value();
+    
+    bool isBluetooth = IsBluetoothDeviceById(deviceIdStr);
+    return Napi::Boolean::New(env, isBluetooth);
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+}
+
 // Initialize the module exports
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   Napi::Value (*originalAudioProcessesFunc)(const Napi::CallbackInfo&) = GetRunningInputAudioProcesses;
   Napi::Value (*microphoneAccessFunc)(const Napi::CallbackInfo&) = GetProcessesAccessingMicrophoneWithResult;
+  Napi::Value (*bluetoothDeviceFunc)(const Napi::CallbackInfo&) = IsBluetoothDevice;
 
   exports.Set("getRunningInputAudioProcesses",
               Napi::Function::New(env, originalAudioProcessesFunc));
   exports.Set("getProcessesAccessingMicrophoneWithResult",
               Napi::Function::New(env, microphoneAccessFunc));
+  exports.Set("isBluetoothDevice",
+              Napi::Function::New(env, bluetoothDeviceFunc));
 
   return exports;
 }

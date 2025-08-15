@@ -196,6 +196,46 @@ bool IsBluetoothDevice(void* pDevicePtr) {
     return isBluetooth;
 }
 
+// Helper function to check if device ID is Bluetooth (wrapper for string-based API)
+bool IsBluetoothDeviceById(const std::string& deviceId) {
+    HRESULT hr = CoInitialize(nullptr);
+    if (FAILED(hr)) return false;
+
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    if (FAILED(hr)) {
+        CoUninitialize();
+        return false;
+    }
+
+    // Convert string to wide string
+    int wideSize = MultiByteToWideChar(CP_UTF8, 0, deviceId.c_str(), -1, nullptr, 0);
+    if (wideSize == 0) {
+        pEnumerator->Release();
+        CoUninitialize();
+        return false;
+    }
+    
+    std::wstring wideDeviceId(wideSize - 1, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, deviceId.c_str(), -1, &wideDeviceId[0], wideSize);
+
+    IMMDevice* pDevice = nullptr;
+    hr = pEnumerator->GetDevice(wideDeviceId.c_str(), &pDevice);
+    if (FAILED(hr)) {
+        pEnumerator->Release();
+        CoUninitialize();
+        return false;
+    }
+
+    bool isBluetooth = IsBluetoothDevice(pDevice);
+
+    pDevice->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+
+    return isBluetooth;
+}
+
 // Helper function to check session activity with standard logic (no Bluetooth-specific permissiveness)
 static bool CheckSessionsForActivity(IMMDevice* pDevice) {
     IAudioSessionManager2* pSessionManager = nullptr;
