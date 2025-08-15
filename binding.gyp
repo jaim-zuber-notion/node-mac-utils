@@ -40,7 +40,8 @@
       ['OS=="win"', {
         "sources": [
           "windows/win_utils.cpp",
-          "windows/AudioProcessMonitor.cpp"
+          "windows/AudioProcessMonitor.cpp",
+          "windows/MicrophoneUsageMonitor.cpp"
         ]
       }]
     ],
