@@ -10,6 +10,22 @@ const noopPlatformUtils = {
       error: null,
       processes: ['', '']
     };
+  },
+  getProcessesAccessingSpeakerWithResult: () => {
+    return {
+      success: false,
+      error: 'Not supported on this platform',
+      processes: []
+    };
+  },
+  isBluetoothDevice: () => {
+    return false;
+  },
+  startMonitoringMic: () => {
+    return false;
+  },
+  stopMonitoringMic: () => {
+    return undefined;
   }
 };
 
@@ -26,13 +42,20 @@ module.exports = {
   // Common exports that work on all platforms
   getRunningInputAudioProcesses: platform_utils.getRunningInputAudioProcesses,
   getProcessesAccessingMicrophoneWithResult: platform_utils.getProcessesAccessingMicrophoneWithResult,
+  
+  // Cross-platform microphone monitoring (now available on Windows and macOS)
+  startMonitoringMic: platform_utils.startMonitoringMic,
+  stopMonitoringMic: platform_utils.stopMonitoringMic,
+  
+  // New Windows methods (with macOS no-ops)  
+  getProcessesAccessingSpeakerWithResult: platform_utils.getProcessesAccessingSpeakerWithResult,
+  isBluetoothDevice: platform_utils.isBluetoothDevice,
+  
   INFO_ERROR_CODE: 1,
   ERROR_DOMAIN: "com.MicrophoneUsageMonitor",
   
   // Mac-specific exports
   ...(process.platform === 'darwin' ? {
     makeKeyAndOrderFront: platform_utils.makeKeyAndOrderFront,
-    startMonitoringMic: platform_utils.startMonitoringMic,
-    stopMonitoringMic: platform_utils.stopMonitoringMic,
   } : {})
 };
