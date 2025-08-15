@@ -366,6 +366,7 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
     }
 
     // Get ALL active capture devices instead of just default
+    IMMDeviceCollection* pCollection = nullptr;
     hr = pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
     if (FAILED(hr)) {
         result.errorCode = hr;
@@ -385,17 +386,40 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
         hr = pCollection->Item(deviceIndex, &pDevice);
         if (FAILED(hr)) continue;
 
-        // Use enhanced activity detection
-        if (HasActiveAudio(pDevice)) {
-            IAudioSessionManager2* pSessionManager = nullptr;
-            hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
-            if (SUCCEEDED(hr)) {
-                IAudioSessionEnumerator* pSessionEnum = nullptr;
-                hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
-                if (SUCCEEDED(hr)) {
-                    int sessionCount = 0;
-                    pSessionEnum->GetCount(&sessionCount);
+        // Use simple activity detection (like main branch) instead of complex HasActiveAudio
+        bool isPeakValueActive = false;
+        IAudioMeterInformation* pMeter = nullptr;
 
+        hr = pDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr, (void**)&pMeter);
+        if (SUCCEEDED(hr)) {
+            float peakValue = 0.0f;
+            pMeter->GetPeakValue(&peakValue);
+            isPeakValueActive = (peakValue > 0.0f);
+            pMeter->Release();
+        }
+
+        bool isPaddingActive = false;
+        IAudioClient* pAudioClient = nullptr;
+        hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&pAudioClient);
+        if (SUCCEEDED(hr)) {
+            UINT32 padding = 0;
+            hr = pAudioClient->GetCurrentPadding(&padding);
+            isPaddingActive = SUCCEEDED(hr) && padding > 0;
+            pAudioClient->Release();
+        }
+
+        // Check sessions if there's any audio activity OR if we have active sessions (more permissive)
+        IAudioSessionManager2* pSessionManager = nullptr;
+        hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
+        if (SUCCEEDED(hr)) {
+            IAudioSessionEnumerator* pSessionEnum = nullptr;
+            hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
+            if (SUCCEEDED(hr)) {
+                int sessionCount = 0;
+                pSessionEnum->GetCount(&sessionCount);
+
+                // More permissive: check sessions if there's audio activity OR active sessions exist
+                if (isPeakValueActive || isPaddingActive || sessionCount > 0) {
                     for (int i = 0; i < sessionCount; i++) {
                         IAudioSessionControl* pSessionControl = nullptr;
                         hr = pSessionEnum->GetSession(i, &pSessionControl);
@@ -412,7 +436,7 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
 
                             if (processID != 0 && state == AudioSessionStateActive) {
                                 std::string processPath = GetProcessExecutablePath(processID);
-
+                                
                                 // Only insert if not already seen
                                 if (seen.insert(processPath).second) {
                                     result.processes.push_back(processPath);
@@ -422,10 +446,10 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
                         }
                         pSessionControl->Release();
                     }
-                    pSessionEnum->Release();
                 }
-                pSessionManager->Release();
+                pSessionEnum->Release();
             }
+            pSessionManager->Release();
         }
 
         pDevice->Release();
