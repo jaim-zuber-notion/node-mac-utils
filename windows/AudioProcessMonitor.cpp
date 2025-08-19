@@ -366,7 +366,6 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
     }
 
     // Get ALL active capture devices instead of just default
-    IMMDeviceCollection* pCollection = nullptr;
     hr = pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
     if (FAILED(hr)) {
         result.errorCode = hr;

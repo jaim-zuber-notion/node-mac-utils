@@ -7,130 +7,141 @@
  * 3. Get a list of processes using the microphone
  */
 
-const { getRunningInputAudioProcesses, INFO_ERROR_CODE, ERROR_DOMAIN } = require('./index');
+const { 
+  getRunningInputAudioProcesses, 
+  getProcessesAccessingMicrophoneWithResult,
+  startMonitoringMic,
+  stopMonitoringMic,
+  INFO_ERROR_CODE, 
+  ERROR_DOMAIN 
+} = require('./index');
 const EventEmitter = require('events');
 
-// Only import mic monitoring functions on Darwin (macOS) systems
-const { startMonitoringMic, stopMonitoringMic } = process.platform === 'darwin'
-  ? require('./index')
-  : {
-      startMonitoringMic: () => {
-        throw new Error('Microphone monitoring is only supported on macOS');
-      },
-      stopMonitoringMic: () => {
-        // No-op for non-Darwin systems
-      }
-    };
+let isMonitoring = false;
+let lastMicState = null;
 
-class MicrophoneStatusEmitter extends EventEmitter {
-  start() {
-    startMonitoringMic((microphoneActive, error) => {
-      if (error) {
-        if (error.code === INFO_ERROR_CODE && error.domain === ERROR_DOMAIN) {
-          this.emit('info', error.message);
-        } else {
-          this.emit('error', error.message);
-        }
-      } else {
-        this.emit('status', microphoneActive);
-      }
-    });
-  }
-
-  stop() {
-    stopMonitoringMic();
-  }
-}
-
-// Function to display microphone processes
-async function displayMicProcesses() {
+// Function to display current microphone processes
+async function displayCurrentMicProcesses() {
   try {
     console.log('\n--- Current Microphone Processes ---');
-    const processes = getRunningInputAudioProcesses(); // Returns simple array
+    const result = getProcessesAccessingMicrophoneWithResult();
 
-    if (processes.length === 0) {
-      console.log('No processes are currently using the microphone');
+    if (result.success) {
+      if (result.processes.length === 0) {
+        console.log('No processes are currently using the microphone');
+      } else {
+        console.log('Processes using the microphone:');
+        result.processes.forEach((process, index) => {
+          console.log(`${index + 1}. ${process}`);
+        });
+      }
     } else {
-      console.log('Processes using the microphone:');
-      processes.forEach((process, index) => {
-        console.log(`${index + 1}. ${process}`);
-      });
+      console.error('Error getting microphone processes:', result.error);
+      if (result.code) console.error('Error code:', result.code);
+      if (result.domain) console.error('Error domain:', result.domain);
     }
+    console.log('----------------------------------------\n');
   } catch (error) {
     console.error('Error getting microphone processes:', error.message);
-    if (error.code) {
-      console.error('Error code:', error.code);
-    }
-    if (error.domain) {
-      console.error('Error domain:', error.domain);
-    }
   }
 }
 
-function startMicrophoneStatusEmitter() {
-  const emitter = new MicrophoneStatusEmitter();
+// Enhanced monitoring with process details
+function startEnhancedMonitoring() {
+  if (isMonitoring) {
+    console.log('Monitoring is already active');
+    return;
+  }
 
-  emitter.on('status', (isActive) => {
-    console.log('🎤 Microphone Status: ' + isActive);
-  });
+  console.log(`🎤 Starting microphone monitoring on ${process.platform}...`);
+  console.log('Listening for microphone session changes...\n');
 
-  emitter.on('info', (info) => {
-    console.log('⚠️ Microphone Info:', info);
-  });
-
-  emitter.on('error', (error) => {
-    console.error('❌ Microphone Error:', error);
-  });
-
-  emitter.start();
-}
-
-function startMicMonitor() {
   try {
     startMonitoringMic((microphoneActive, error) => {
       const timestamp = new Date().toISOString();
 
       if (error) {
-        console.error('Node - error');
-        console.error('Error starting microphone monitor:', error.message);
-        if (error.code) {
-          console.error('Error code:', error.code);
+        console.error(`❌ [${timestamp}] Microphone monitoring error:`, error);
+        if (typeof error === 'object') {
+          if (error.code) console.error('   Error code:', error.code);
+          if (error.domain) console.error('   Error domain:', error.domain);
         }
-        if (error.domain) {
-          console.error('Error domain:', error.domain);
+        return;
+      }
+
+      // Only report state changes or initial state
+      if (lastMicState !== microphoneActive) {
+        lastMicState = microphoneActive;
+        
+        const status = microphoneActive ? '🟢 ACTIVE' : '🔴 INACTIVE';
+        const action = microphoneActive ? 'connected' : 'disconnected';
+        
+        console.log(`🎤 [${timestamp}] Microphone ${status} - Session ${action}`);
+        
+        // Show current processes when microphone becomes active
+        if (microphoneActive) {
+          setTimeout(displayCurrentMicProcesses, 100); // Small delay to catch the new process
         }
-      } else {
-        console.log(`Node: [${timestamp}] Microphone active:`, microphoneActive);
       }
     });
+
+    isMonitoring = true;
+    console.log('✅ Microphone monitoring started successfully!');
+    console.log('💡 Try joining a video call, using voice recording, or starting an audio app...');
+    
   } catch (error) {
-    console.error('Node - error');
-    console.error('Error starting microphone monitor:', error.message);
-    if (error.code) {
-      console.error('Error code:', error.code);
-    }
-    if (error.domain) {
-      console.error('Error domain:', error.domain);
-    }
+    console.error('❌ Failed to start microphone monitoring:', error.message);
+    if (error.code) console.error('   Error code:', error.code);
+    if (error.domain) console.error('   Error domain:', error.domain);
   }
 }
 
-// Handle process termination
-process.on('SIGINT', () => {
-  console.log('\nStopping microphone monitoring...');
-  stopMonitoringMic();
+// Graceful shutdown
+function gracefulShutdown() {
+  if (isMonitoring) {
+    console.log('\n🛑 Stopping microphone monitoring...');
+    stopMonitoringMic();
+    isMonitoring = false;
+    console.log('✅ Monitoring stopped');
+  }
   process.exit(0);
+}
+
+// Handle process termination signals
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
+
+// Keep the process alive
+process.stdin.resume();
+process.stdin.setEncoding('utf8');
+
+// Optional: Allow manual commands
+process.stdin.on('data', (data) => {
+  const command = data.toString().trim().toLowerCase();
+  
+  if (command === 'status' || command === 's') {
+    displayCurrentMicProcesses();
+  } else if (command === 'quit' || command === 'q' || command === 'exit') {
+    gracefulShutdown();
+  } else if (command === 'help' || command === 'h') {
+    console.log('\nAvailable commands:');
+    console.log('  status (s) - Show current microphone processes');
+    console.log('  help   (h) - Show this help message');
+    console.log('  quit   (q) - Exit the monitor');
+    console.log('  Ctrl+C     - Exit the monitor\n');
+  }
 });
 
-console.log('Starting microphone monitoring...');
-console.log('Press Ctrl+C to stop.\n');
+// Start the monitoring
+console.log('🎵 Microphone Session Monitor');
+console.log('============================');
+console.log('Platform:', process.platform);
+console.log('Press Ctrl+C to stop, or type "help" for commands\n');
 
-displayMicProcesses();
+// Show initial state
+displayCurrentMicProcesses();
 
-if (process.platform === 'darwin') {
-  startMicrophoneStatusEmitter();
-  // Keep the process running
-  process.stdin.resume();
-}
+// Start monitoring
+startEnhancedMonitoring();
 
 
