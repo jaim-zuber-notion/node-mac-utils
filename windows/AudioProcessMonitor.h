@@ -11,8 +11,28 @@ struct AudioProcessResult {
     AudioProcessResult() : errorCode(S_OK), success(true) {}
 };
 
+// Speaker/render process detection for Windows
+struct RenderProcessInfo {
+    std::string processName;
+    DWORD processId;
+    std::string deviceName;
+    bool isActive;
+};
+
+struct RenderProcessResult {
+    std::vector<RenderProcessInfo> processes;
+    HRESULT errorCode;
+    std::string errorMessage;
+    bool success;
+
+    RenderProcessResult() : errorCode(S_OK), success(true) {}
+};
+
 // Original function returning vector (restored)
 std::vector<std::string> GetAudioInputProcesses();
 
 // New function with structured result
 AudioProcessResult GetProcessesAccessingMicrophoneWithResult();
+
+// Speaker/render process detection
+RenderProcessResult GetRenderProcessesWithResult();

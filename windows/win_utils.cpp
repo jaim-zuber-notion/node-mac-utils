@@ -57,15 +57,59 @@ Napi::Value GetProcessesAccessingMicrophoneWithResult(const Napi::CallbackInfo& 
   }
 }
 
+// Gets a list of processes that are using speakers/render devices
+Napi::Value GetRenderProcessesWithResult(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  try {
+    RenderProcessResult result = GetRenderProcessesWithResult();
+
+    // Create a JavaScript object to represent the RenderProcessResult
+    Napi::Object resultObj = Napi::Object::New(env);
+    if (!result.success) {
+      // Set error information
+      resultObj.Set("success", Napi::Boolean::New(env, false));
+      resultObj.Set("error", Napi::String::New(env, result.errorMessage));
+      resultObj.Set("code", Napi::Number::New(env, result.errorCode));
+      resultObj.Set("domain", Napi::String::New(env, "RenderProcessMonitor"));
+      resultObj.Set("processes", Napi::Array::New(env));
+    } else {
+      // Set success information
+      resultObj.Set("success", Napi::Boolean::New(env, true));
+      resultObj.Set("error", env.Null());
+
+      // Convert processes array
+      Napi::Array processesArray = Napi::Array::New(env);
+      for (size_t i = 0; i < result.processes.size(); i++) {
+        Napi::Object processObj = Napi::Object::New(env);
+        processObj.Set("processName", Napi::String::New(env, result.processes[i].processName));
+        processObj.Set("processId", Napi::Number::New(env, result.processes[i].processId));
+        processObj.Set("deviceName", Napi::String::New(env, result.processes[i].deviceName));
+        processObj.Set("isActive", Napi::Boolean::New(env, result.processes[i].isActive));
+        processesArray.Set(i, processObj);
+      }
+      resultObj.Set("processes", processesArray);
+    }
+
+    return resultObj;
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+}
+
 // Initialize the module exports
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   Napi::Value (*originalAudioProcessesFunc)(const Napi::CallbackInfo&) = GetRunningInputAudioProcesses;
   Napi::Value (*microphoneAccessFunc)(const Napi::CallbackInfo&) = GetProcessesAccessingMicrophoneWithResult;
+  Napi::Value (*renderProcessesFunc)(const Napi::CallbackInfo&) = GetRenderProcessesWithResult;
 
   exports.Set("getRunningInputAudioProcesses",
               Napi::Function::New(env, originalAudioProcessesFunc));
   exports.Set("getProcessesAccessingMicrophoneWithResult",
               Napi::Function::New(env, microphoneAccessFunc));
+  exports.Set("getProcessesAccessingSpeakersWithResult",
+              Napi::Function::New(env, renderProcessesFunc));
 
   return exports;
 }

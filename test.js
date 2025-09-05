@@ -27,18 +27,44 @@ async function runTests() {
             console.error('  Error domain:', result.domain);
         }
 
+        // Test getProcessesAccessingSpeakersWithResult (cross-platform)
+        console.log('\nTesting getProcessesAccessingSpeakersWithResult:');
+        const renderResult = utils.getProcessesAccessingSpeakersWithResult();
+        console.log('Type:', typeof renderResult);
+        console.log('Result:', renderResult);
+
+        if (renderResult.success) {
+            console.log('✓ Success - Render processes:', renderResult.processes);
+            console.log('  Process count:', renderResult.processes.length);
+
+            if (process.platform === 'win32' && renderResult.processes.length > 0) {
+                console.log('Sample render process structure:');
+                console.log('  processName:', renderResult.processes[0].processName);
+                console.log('  processId:', renderResult.processes[0].processId);
+                console.log('  deviceName:', renderResult.processes[0].deviceName);
+                console.log('  isActive:', renderResult.processes[0].isActive);
+            }
+        } else {
+            console.error('✗ Error getting render processes:', renderResult.error);
+            console.error('  Error code:', renderResult.code);
+            console.error('  Error domain:', renderResult.domain);
+        }
+
         // Test platform-specific functions
         if (process.platform === 'darwin') {
             console.log('\nTesting Mac-specific functions:');
             console.log('makeKeyAndOrderFront available:', !!utils.makeKeyAndOrderFront);
             console.log('startMonitoringMic available:', !!utils.startMonitoringMic);
             console.log('stopMonitoringMic available:', !!utils.stopMonitoringMic);
+            console.log('getProcessesAccessingSpeakersWithResult (no-op):', renderResult.success && renderResult.processes.length === 0 ? 'Returns success with empty processes ✓' : 'Unexpected data');
         } else if (process.platform === 'win32') {
             console.log('\nTesting Windows-specific functions:');
             console.log('getRunningInputAudioProcesses available:', !!utils.getRunningInputAudioProcesses);
             console.log('getProcessesAccessingMicrophoneWithResult available:', !!utils.getProcessesAccessingMicrophoneWithResult);
+            console.log('getProcessesAccessingSpeakersWithResult available:', !!utils.getProcessesAccessingSpeakersWithResult);
         } else {
             console.log('node-mac-utils Unsupported platform:', process.platform);
+            console.log('getProcessesAccessingSpeakersWithResult (no-op):', renderResult.success && renderResult.processes.length === 0 ? 'Returns success with empty processes ✓' : 'Unexpected data');
         }
 
         // Compare both methods

@@ -176,6 +176,19 @@ Napi::Value StopMonitoringMic(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+// No-op implementation for getRenderProcessesWithResult (Windows-only feature)
+Napi::Value GetRenderProcessesWithResult(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Return same structure as Windows version for consistency
+  Napi::Object resultObj = Napi::Object::New(env);
+  resultObj.Set("success", Napi::Boolean::New(env, true));
+  resultObj.Set("error", env.Null());
+  resultObj.Set("processes", Napi::Array::New(env));
+
+  return resultObj;
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "makeKeyAndOrderFront"),
               Napi::Function::New(env, MakeKeyAndOrderFront));
@@ -191,6 +204,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   exports.Set(Napi::String::New(env, "stopMonitoringMic"),
               Napi::Function::New(env, StopMonitoringMic));
+
+  exports.Set(Napi::String::New(env, "getProcessesAccessingSpeakersWithResult"),
+              Napi::Function::New(env, GetRenderProcessesWithResult));
 
   return exports;
 }
