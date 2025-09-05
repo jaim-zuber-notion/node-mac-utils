@@ -108,7 +108,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
               Napi::Function::New(env, originalAudioProcessesFunc));
   exports.Set("getProcessesAccessingMicrophoneWithResult",
               Napi::Function::New(env, microphoneAccessFunc));
-  exports.Set("getRenderProcessesWithResult",
+  exports.Set("getProcessesAccessingSpeakersWithResult",
               Napi::Function::New(env, renderProcessesFunc));
 
   return exports;

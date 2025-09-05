@@ -205,7 +205,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "stopMonitoringMic"),
               Napi::Function::New(env, StopMonitoringMic));
 
-  exports.Set(Napi::String::New(env, "getRenderProcessesWithResult"),
+  exports.Set(Napi::String::New(env, "getProcessesAccessingSpeakersWithResult"),
               Napi::Function::New(env, GetRenderProcessesWithResult));
 
   return exports;

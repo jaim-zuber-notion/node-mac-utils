@@ -27,9 +27,9 @@ async function runTests() {
             console.error('  Error domain:', result.domain);
         }
 
-        // Test getRenderProcessesWithResult (cross-platform)
-        console.log('\nTesting getRenderProcessesWithResult:');
-        const renderResult = utils.getRenderProcessesWithResult();
+        // Test getProcessesAccessingSpeakersWithResult (cross-platform)
+        console.log('\nTesting getProcessesAccessingSpeakersWithResult:');
+        const renderResult = utils.getProcessesAccessingSpeakersWithResult();
         console.log('Type:', typeof renderResult);
         console.log('Result:', renderResult);
 
@@ -56,15 +56,15 @@ async function runTests() {
             console.log('makeKeyAndOrderFront available:', !!utils.makeKeyAndOrderFront);
             console.log('startMonitoringMic available:', !!utils.startMonitoringMic);
             console.log('stopMonitoringMic available:', !!utils.stopMonitoringMic);
-            console.log('getRenderProcessesWithResult (no-op):', renderResult.success && renderResult.processes.length === 0 ? 'Returns success with empty processes ✓' : 'Unexpected data');
+            console.log('getProcessesAccessingSpeakersWithResult (no-op):', renderResult.success && renderResult.processes.length === 0 ? 'Returns success with empty processes ✓' : 'Unexpected data');
         } else if (process.platform === 'win32') {
             console.log('\nTesting Windows-specific functions:');
             console.log('getRunningInputAudioProcesses available:', !!utils.getRunningInputAudioProcesses);
             console.log('getProcessesAccessingMicrophoneWithResult available:', !!utils.getProcessesAccessingMicrophoneWithResult);
-            console.log('getRenderProcessesWithResult available:', !!utils.getRenderProcessesWithResult);
+            console.log('getProcessesAccessingSpeakersWithResult available:', !!utils.getProcessesAccessingSpeakersWithResult);
         } else {
             console.log('node-mac-utils Unsupported platform:', process.platform);
-            console.log('getRenderProcessesWithResult (no-op):', renderResult.success && renderResult.processes.length === 0 ? 'Returns success with empty processes ✓' : 'Unexpected data');
+            console.log('getProcessesAccessingSpeakersWithResult (no-op):', renderResult.success && renderResult.processes.length === 0 ? 'Returns success with empty processes ✓' : 'Unexpected data');
         }
 
         // Compare both methods
