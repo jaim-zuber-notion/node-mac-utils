@@ -13,6 +13,7 @@
 #include "AudioProcessMonitor.h"
 #include <Audioclient.h>
 #include <unordered_set>
+#include <functiondiscoverykeys_devpkey.h>
 
 #pragma comment(lib, "Ole32.lib")
 
@@ -278,4 +279,134 @@ std::vector<std::string> GetAudioInputProcesses() {
     CoUninitialize();
 
     return results;
+}
+
+// Speaker/render process detection - separate from microphone monitoring
+std::vector<RenderProcessInfo> GetRenderProcesses() {
+    std::vector<RenderProcessInfo> processes;
+    HRESULT hr = CoInitialize(nullptr);
+
+    if (FAILED(hr)) {
+        return processes;
+    }
+
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    IMMDeviceCollection* pCollection = nullptr;
+
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    if (FAILED(hr)) {
+        CoUninitialize();
+        return processes;
+    }
+
+    // Get ALL active render (speaker) devices
+    hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+    if (FAILED(hr)) {
+        pEnumerator->Release();
+        CoUninitialize();
+        return processes;
+    }
+
+    UINT deviceCount = 0;
+    pCollection->GetCount(&deviceCount);
+
+    // Check each active render device
+    for (UINT deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++) {
+        IMMDevice* pDevice = nullptr;
+        hr = pCollection->Item(deviceIndex, &pDevice);
+        if (FAILED(hr)) continue;
+
+        // Get device name
+        std::string deviceName = "Unknown Device";
+        IPropertyStore* pProps = nullptr;
+        hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
+        if (SUCCEEDED(hr)) {
+            PROPVARIANT varName;
+            PropVariantInit(&varName);
+            hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
+
+            if (SUCCEEDED(hr) && varName.vt == VT_LPWSTR) {
+                std::wstring wDeviceName(varName.pwszVal);
+                deviceName.resize(wDeviceName.size() * 4);
+                int bytesWritten = WideCharToMultiByte(CP_UTF8, 0, wDeviceName.c_str(), -1,
+                                                     &deviceName[0], deviceName.size(), nullptr, nullptr);
+                if (bytesWritten > 0) {
+                    deviceName.resize(bytesWritten - 1);
+                }
+            }
+
+            PropVariantClear(&varName);
+            pProps->Release();
+        }
+
+        IAudioSessionManager2* pSessionManager = nullptr;
+        hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
+        if (SUCCEEDED(hr)) {
+            IAudioSessionEnumerator* pSessionEnum = nullptr;
+            hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
+            if (SUCCEEDED(hr)) {
+                int sessionCount = 0;
+                pSessionEnum->GetCount(&sessionCount);
+
+                for (int i = 0; i < sessionCount; i++) {
+                    IAudioSessionControl* pSessionControl = nullptr;
+                    hr = pSessionEnum->GetSession(i, &pSessionControl);
+                    if (FAILED(hr)) continue;
+
+                    IAudioSessionControl2* pSessionControl2 = nullptr;
+                    hr = pSessionControl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pSessionControl2);
+                    if (SUCCEEDED(hr)) {
+                        DWORD processId = 0;
+                        pSessionControl2->GetProcessId(&processId);
+
+                        AudioSessionState state;
+                        pSessionControl2->GetState(&state);
+
+                        // Check if session is active and not muted
+                        ISimpleAudioVolume* pVolume = nullptr;
+                        bool isActiveSession = false;
+                        hr = pSessionControl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&pVolume);
+                        if (SUCCEEDED(hr)) {
+                            BOOL isMuted = FALSE;
+                            pVolume->GetMute(&isMuted);
+
+                            // For render sessions, active state + not muted = active
+                            isActiveSession = (state == AudioSessionStateActive && !isMuted);
+                            pVolume->Release();
+                        }
+
+                        if (processId != 0 && isActiveSession) {
+                            RenderProcessInfo info;
+                            info.processId = processId;
+                            info.processName = GetProcessExecutablePath(processId);
+
+                            // Extract filename from path
+                            size_t lastSlash = info.processName.find_last_of("\\");
+                            if (lastSlash != std::string::npos) {
+                                info.processName = info.processName.substr(lastSlash + 1);
+                            }
+
+                            info.deviceName = deviceName;
+                            info.isActive = true;
+                            processes.push_back(info);
+                        }
+
+                        pSessionControl2->Release();
+                    }
+                    pSessionControl->Release();
+                }
+                pSessionEnum->Release();
+            }
+            pSessionManager->Release();
+        }
+
+        pDevice->Release();
+    }
+
+    // Cleanup
+    pCollection->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+
+    return processes;
 }

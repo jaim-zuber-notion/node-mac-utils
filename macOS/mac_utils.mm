@@ -176,6 +176,12 @@ Napi::Value StopMonitoringMic(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+// No-op implementation for getRenderProcesses (Windows-only feature)
+Napi::Value GetRenderProcesses(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  return Napi::Array::New(env);
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "makeKeyAndOrderFront"),
               Napi::Function::New(env, MakeKeyAndOrderFront));
@@ -191,6 +197,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   exports.Set(Napi::String::New(env, "stopMonitoringMic"),
               Napi::Function::New(env, StopMonitoringMic));
+
+  exports.Set(Napi::String::New(env, "getRenderProcesses"),
+              Napi::Function::New(env, GetRenderProcesses));
 
   return exports;
 }
