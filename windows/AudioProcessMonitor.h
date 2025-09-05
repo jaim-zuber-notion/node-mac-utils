@@ -19,6 +19,15 @@ struct RenderProcessInfo {
     bool isActive;
 };
 
+struct RenderProcessResult {
+    std::vector<RenderProcessInfo> processes;
+    HRESULT errorCode;
+    std::string errorMessage;
+    bool success;
+
+    RenderProcessResult() : errorCode(S_OK), success(true) {}
+};
+
 // Original function returning vector (restored)
 std::vector<std::string> GetAudioInputProcesses();
 
@@ -26,4 +35,4 @@ std::vector<std::string> GetAudioInputProcesses();
 AudioProcessResult GetProcessesAccessingMicrophoneWithResult();
 
 // Speaker/render process detection
-std::vector<RenderProcessInfo> GetRenderProcesses();
+RenderProcessResult GetRenderProcessesWithResult();

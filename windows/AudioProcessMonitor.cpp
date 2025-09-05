@@ -282,12 +282,15 @@ std::vector<std::string> GetAudioInputProcesses() {
 }
 
 // Speaker/render process detection - separate from microphone monitoring
-std::vector<RenderProcessInfo> GetRenderProcesses() {
-    std::vector<RenderProcessInfo> processes;
+RenderProcessResult GetRenderProcessesWithResult() {
+    RenderProcessResult result;
     HRESULT hr = CoInitialize(nullptr);
 
     if (FAILED(hr)) {
-        return processes;
+        result.errorCode = hr;
+        result.errorMessage = "Failed to initialize COM";
+        result.success = false;
+        return result;
     }
 
     IMMDeviceEnumerator* pEnumerator = nullptr;
@@ -295,16 +298,22 @@ std::vector<RenderProcessInfo> GetRenderProcesses() {
 
     hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) {
+        result.errorCode = hr;
+        result.errorMessage = "Failed to create device enumerator";
+        result.success = false;
         CoUninitialize();
-        return processes;
+        return result;
     }
 
     // Get ALL active render (speaker) devices
     hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
     if (FAILED(hr)) {
+        result.errorCode = hr;
+        result.errorMessage = "Failed to enumerate audio endpoints";
+        result.success = false;
         pEnumerator->Release();
         CoUninitialize();
-        return processes;
+        return result;
     }
 
     UINT deviceCount = 0;
@@ -388,7 +397,7 @@ std::vector<RenderProcessInfo> GetRenderProcesses() {
 
                             info.deviceName = deviceName;
                             info.isActive = true;
-                            processes.push_back(info);
+                            result.processes.push_back(info);
                         }
 
                         pSessionControl2->Release();
@@ -408,5 +417,5 @@ std::vector<RenderProcessInfo> GetRenderProcesses() {
     pEnumerator->Release();
     CoUninitialize();
 
-    return processes;
+    return result;
 }

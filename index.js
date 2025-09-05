@@ -11,8 +11,12 @@ const noopPlatformUtils = {
       processes: ["", ""],
     };
   },
-  getRenderProcesses: () => {
-    return [];
+  getRenderProcessesWithResult: () => {
+    return {
+      success: true,
+      error: null,
+      processes: [],
+    };
   },
 };
 
@@ -30,7 +34,7 @@ module.exports = {
   getRunningInputAudioProcesses: platform_utils.getRunningInputAudioProcesses,
   getProcessesAccessingMicrophoneWithResult:
     platform_utils.getProcessesAccessingMicrophoneWithResult,
-  getRenderProcesses: platform_utils.getRenderProcesses,
+  getRenderProcessesWithResult: platform_utils.getRenderProcessesWithResult,
   INFO_ERROR_CODE: 1,
   ERROR_DOMAIN: "com.MicrophoneUsageMonitor",
 
