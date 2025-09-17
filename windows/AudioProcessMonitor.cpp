@@ -172,89 +172,96 @@ std::vector<std::string> GetAudioInputProcesses() {
     }
 
     IMMDeviceEnumerator* pEnumerator = nullptr;
-    IMMDeviceCollection* pCollection = nullptr;
+    IMMDevice* pDevice = nullptr;
+    IAudioSessionManager2* pSessionManager = nullptr;
+    IAudioSessionEnumerator* pSessionEnum = nullptr;
 
     hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) {
         return results;
     }
 
-    // MINIMAL FIX: Get ALL active capture devices instead of just default
-    hr = pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
+    // Get default capture (microphone) device
+    hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
     if (FAILED(hr)) {
         pEnumerator->Release();
         return results;
     }
 
-    UINT deviceCount = 0;
-    pCollection->GetCount(&deviceCount);
+    bool isActive = false;
+    IAudioMeterInformation* pMeter = nullptr;
 
-    // Check each active capture device  
-    for (UINT deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++) {
-        IMMDevice* pDevice = nullptr;
-        hr = pCollection->Item(deviceIndex, &pDevice);
+    // Get the Audio Meter Interface
+    hr = pDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr, (void**)&pMeter);
+    if (SUCCEEDED(hr)) {
+        float peakValue = 0.0f;
+        pMeter->GetPeakValue(&peakValue);
+        isActive = (peakValue > 0.0f);
+        pMeter->Release();
+    }
+
+    if (!isActive) {
+        pDevice->Release();
+        pEnumerator->Release();
+        CoUninitialize();
+        return results;
+    }
+
+    // Get session manager
+    hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
+    if (FAILED(hr)) {
+        std::cerr << "Failed to activate IAudioSessionManager2. HRESULT: " << std::hex << hr << std::endl;
+        pDevice->Release();
+        pEnumerator->Release();
+        CoUninitialize();
+        return results;
+    }
+
+    // Get audio session enumerator
+    hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
+    if (FAILED(hr)) {
+        std::cerr << "Failed to get IAudioSessionEnumerator. HRESULT: " << std::hex << hr << std::endl;
+        pSessionManager->Release();
+        pDevice->Release();
+        pEnumerator->Release();
+        CoUninitialize();
+        return results;
+    }
+
+    int sessionCount = 0;
+    pSessionEnum->GetCount(&sessionCount);
+
+    for (int i = 0; i < sessionCount; i++) {
+        IAudioSessionControl* pSessionControl = nullptr;
+        hr = pSessionEnum->GetSession(i, &pSessionControl);
         if (FAILED(hr)) continue;
 
-        bool isActive = false;
-        IAudioMeterInformation* pMeter = nullptr;
-
-        // Get the Audio Meter Interface
-        hr = pDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr, (void**)&pMeter);
+        IAudioSessionControl2* pSessionControl2 = nullptr;
+        hr = pSessionControl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pSessionControl2);
         if (SUCCEEDED(hr)) {
-            float peakValue = 0.0f;
-            pMeter->GetPeakValue(&peakValue);
-            isActive = (peakValue > 0.0f);
-            pMeter->Release();
-        }
+            DWORD processID = 0;
+            pSessionControl2->GetProcessId(&processID);
 
-        if (isActive) {
-            // Get session manager
-            IAudioSessionManager2* pSessionManager = nullptr;
-            hr = pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager);
-            if (SUCCEEDED(hr)) {
-                // Get audio session enumerator
-                IAudioSessionEnumerator* pSessionEnum = nullptr;
-                hr = pSessionManager->GetSessionEnumerator(&pSessionEnum);
-                if (SUCCEEDED(hr)) {
-                    int sessionCount = 0;
-                    pSessionEnum->GetCount(&sessionCount);
+            AudioSessionState state;
+            pSessionControl2->GetState(&state);
 
-                    for (int i = 0; i < sessionCount; i++) {
-                        IAudioSessionControl* pSessionControl = nullptr;
-                        hr = pSessionEnum->GetSession(i, &pSessionControl);
-                        if (FAILED(hr)) continue;
+            if (processID != 0 && state == AudioSessionStateActive) {
+                std::string processPath = GetProcessExecutablePath(processID);
 
-                        IAudioSessionControl2* pSessionControl2 = nullptr;
-                        hr = pSessionControl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pSessionControl2);
-                        if (SUCCEEDED(hr)) {
-                            DWORD processID = 0;
-                            pSessionControl2->GetProcessId(&processID);
-
-                            AudioSessionState state;
-                            pSessionControl2->GetState(&state);
-
-                            if (processID != 0 && state == AudioSessionStateActive) {
-                                std::string processPath = GetProcessExecutablePath(processID);
-
-                                // Only insert if not already seen
-                                if (seen.insert(processPath).second) {
-                                    results.push_back(processPath);
-                                }
-                            }
-                            pSessionControl2->Release();
-                        }
-                        pSessionControl->Release();
-                    }
-                    pSessionEnum->Release();
+                // Only insert if not already seen
+                if (seen.insert(processPath).second) {
+                    results.push_back(processPath);
                 }
-                pSessionManager->Release();
             }
+            pSessionControl2->Release();
         }
-        pDevice->Release();
+        pSessionControl->Release();
     }
 
     // Cleanup
-    pCollection->Release();
+    pSessionEnum->Release();
+    pSessionManager->Release();
+    pDevice->Release();
     pEnumerator->Release();
     CoUninitialize();
 
