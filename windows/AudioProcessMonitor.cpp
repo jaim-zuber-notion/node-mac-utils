@@ -86,6 +86,7 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
         hr = pCollection->Item(deviceIndex, &pDevice);
         if (FAILED(hr)) continue;
 
+        // Ensure pDevice is always released at end of loop iteration
         bool isPeakValueActive = false;
         IAudioMeterInformation* pMeter = nullptr;
 
@@ -148,9 +149,11 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
                     }
                     pSessionEnum->Release();
                 }
+                // Always release session manager, whether GetSessionEnumerator succeeded or failed
                 pSessionManager->Release();
             }
         }
+        // Always release device at end of each loop iteration
         pDevice->Release();
     }
 
