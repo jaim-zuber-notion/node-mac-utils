@@ -136,7 +136,7 @@ AudioProcessResult GetProcessesAccessingMicrophoneWithResult() {
 
                             if (processID != 0 && state == AudioSessionStateActive) {
                                 std::string processPath = GetProcessExecutablePath(processID);
-                                
+
                                 // Only insert if not already seen
                                 if (seen.insert(processPath).second) {
                                     result.processes.push_back(processPath);
